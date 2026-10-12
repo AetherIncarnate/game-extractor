@@ -21,7 +21,6 @@
 
     let foundItems = [];
 
-    // Extract core domain name
     let currentHost = location.hostname.replace(/^www\./, '');
     let coreDomain = currentHost.split('.')[0] || 'localhost';
 
@@ -34,7 +33,6 @@
         }
     }
 
-    // Decode URI / Base64 / Ultraviolet Proxy Strings
     function decodeProxyUrl(raw) {
         if (!raw) return raw;
         try {
@@ -165,94 +163,93 @@
     deepScan(document);
     foundItems.sort((a, b) => b.score - a.score);
 
-    // Build Hacker Terminal UI
+    // Build Anime Cyber-Neon UI
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
-    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:#030a05;color:#00ff66;padding:22px;border-radius:12px;box-shadow:0 0 50px rgba(0,255,102,0.25), 0 0 100px rgba(0,0,0,0.95);z-index:999999;font-family:"Courier New", Courier, monospace;box-sizing:border-box;border:1px solid #00ff66;backdrop-filter:blur(20px);';
+    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:linear-gradient(135deg, #12081f, #0c0614);color:#fff;padding:22px;border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,0.9), 0 0 40px rgba(255,0,127,0.25);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1.5px solid rgba(255,0,127,0.45);backdrop-filter:blur(20px);';
 
     let html = `
         <style>
-            #ultimate-game-extractor::-webkit-scrollbar { width: 4px; }
-            #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #00ff66; }
-            .uge-btn { background:#001a0d; color:#00ff66; border:1px solid #00ff66; font-family:"Courier New", Courier, monospace; font-weight:bold; cursor:pointer; text-transform:uppercase; transition:all 0.15s ease-in-out; }
-            .uge-btn:hover { background:#00ff66; color:#000; box-shadow:0 0 12px #00ff66; }
-            .uge-card { background:#021006; border:1px solid rgba(0,255,102,0.25); padding:10px; border-radius:6px; margin-bottom:8px; position:relative; }
-            .uge-card:hover { border-color:#00ff66; box-shadow:0 0 10px rgba(0,255,102,0.2); }
-            @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-            .uge-blink { animation: pulse 1.2s infinite; }
+            #ultimate-game-extractor::-webkit-scrollbar { width: 6px; }
+            #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #ff007f; border-radius: 4px; }
+            .anime-btn { background:linear-gradient(135deg, #25103a, #1a082b); color:#00f0ff; border:1px solid rgba(0,240,255,0.4); font-family:inherit; font-weight:700; cursor:pointer; border-radius:10px; transition:all 0.2s; }
+            .anime-btn:hover { background:linear-gradient(135deg, #ff007f, #b30059); color:#fff; border-color:#ff007f; box-shadow:0 0 15px rgba(255,0,127,0.5); }
+            .anime-card { background:rgba(25, 12, 43, 0.6); border:1px solid rgba(255,0,127,0.2); padding:12px; border-radius:14px; margin-bottom:10px; transition:all 0.2s; }
+            .anime-card:hover { border-color:#00f0ff; box-shadow:0 0 15px rgba(0,240,255,0.2); }
+            @keyframes animeGlow { 0% { opacity: 0.7; } 50% { opacity: 1; text-shadow:0 0 12px #ff007f; } 100% { opacity: 0.7; } }
+            .anime-title-glow { animation: animeGlow 2s infinite; }
         </style>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #00ff66;padding-bottom:10px;">
-            <div style="font-size:15px;font-weight:bold;letter-spacing:1px;display:flex;align-items:center;gap:8px;">
-                <span class="uge-blink" style="color:#00ff66;">[SYSTEM_SNIFFER_v5.5]</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+            <div style="font-size:16px;font-weight:900;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;">
+                <span class="anime-title-glow" style="color:#ff007f;">🌸 GAME STEALER</span> <span style="font-size:10px;background:rgba(0,240,255,0.15);color:#00f0ff;padding:2px 8px;border-radius:6px;border:1px solid rgba(0,240,255,0.3);">v6.0 OTARI</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-                <button id="uge-toggle-settings" class="uge-btn" style="padding:4px 8px;font-size:10px;">[SYS_CONFIG]</button>
-                <span style="font-size:11px;background:#002b15;padding:4px 8px;border-radius:4px;border:1px solid #00ff66;color:#00ff66;">HOSTS: ${foundItems.length}</span>
+                <button id="uge-toggle-settings" class="anime-btn" style="padding:5px 10px;font-size:11px;">⚙️ OPTIONS</button>
+                <span style="font-size:11px;font-weight:bold;background:#1a082b;padding:5px 10px;border-radius:8px;color:#ff007f;border:1px solid rgba(255,0,127,0.3);">FOUND: ${foundItems.length}</span>
             </div>
         </div>
 
-        <div style="font-size:10px;color:#00bb44;margin-bottom:12px;letter-spacing:0.5px;line-height:1.2;">
-            &gt; STATUS: INFILTRATED ROOT DOMAIN [${coreDomain}]<br>
-            &gt; PARSING: SHADOW_DOM / SCRIPT_PAYLOADS / PROXY_WRAPPERS
+        <div style="font-size:11px;color:#b1a2c8;margin-bottom:14px;letter-spacing:0.3px;line-height:1.4;">
+            ✨ Target Domain: <b style="color:#00f0ff;">${coreDomain}</b> | Engine Status: <span style="color:#00ff66;">Ready ✨</span>
         </div>
 
-        <div id="uge-settings-panel" style="display:none;background:#011408;border:1px dashed #00ff66;padding:12px;border-radius:6px;margin-bottom:12px;font-size:10px;">
-            <div style="font-weight:bold;color:#00ff66;margin-bottom:8px;">&gt; OVERRIDE_PARAMETERS:</div>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00ff66;"> BOOST_SAME_DOMAIN_TARGETS (${coreDomain})
+        <div id="uge-settings-panel" style="display:none;background:rgba(18, 8, 31, 0.95);border:1px solid rgba(0,240,255,0.3);padding:14px;border-radius:14px;margin-bottom:14px;font-size:11px;">
+            <div style="font-weight:900;color:#00f0ff;margin-bottom:10px;letter-spacing:0.5px;text-transform:uppercase;">⚙️ Customization & Filters</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
+                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#ff007f;"> Boost Same-Domain Links (${coreDomain})
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00ff66;"> PURGE_STATIC_IMAGE_PAYLOADS (png, jpg, svg)
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
+                    <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#ff007f;"> Exclude Image Files (png, jpg, svg)
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#00ff66;"> STRICT_EXPLOIT_MODE (.html / CDN / Game Endpoints)
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
+                    <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#ff007f;"> Strict Mode (.html / Game / CDN endpoints)
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#00ff66;"> PRIORITY_SCORES_FOR_CLOUD_CDNS
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
+                    <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#ff007f;"> Prioritize Cloud CDNs & Storage
                 </label>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                    <span>MINIMUM_SCORE_CUTOFF:</span>
-                    <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:45px;background:#001a0d;color:#00ff66;border:1px solid #00ff66;padding:2px;text-align:center;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#aaa;">
+                    <span>Minimum Score Threshold:</span>
+                    <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#0c0614;color:#00f0ff;border:1px solid rgba(0,240,255,0.3);padding:4px;border-radius:6px;text-align:center;">
                 </div>
             </div>
-            <button id="uge-save-settings" class="uge-btn" style="width:100%;margin-top:10px;padding:6px;font-size:10px;">&gt; EXECUTE_OVERRIDE_RESCAN</button>
+            <button id="uge-save-settings" class="anime-btn" style="width:100%;margin-top:12px;padding:8px;font-weight:900;">Save & Rescan ✨</button>
         </div>
     `;
 
     if (foundItems.length > 0) {
-        html += `<div style="max-height:250px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">`;
+        html += `<div style="max-height:260px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">`;
         
         foundItems.forEach((item, i) => {
             let isBest = i === 0;
-            let badge = isBest ? '<span style="background:#00ff66;color:#000;font-size:8px;padding:2px 5px;border-radius:2px;margin-right:6px;font-weight:900;">[PRIMARY_MATCH]</span>' : '';
-            let cardStyle = isBest ? 'border:1px solid #00ff66;background:#00220d;box-shadow:0 0 10px rgba(0,255,102,0.3);' : '';
+            let badge = isBest ? '<span style="background:linear-gradient(135deg, #ff007f, #ff66cc);color:#fff;font-size:9px;padding:3px 8px;border-radius:6px;margin-right:6px;font-weight:900;box-shadow:0 0 10px rgba(255,0,127,0.5);">💖 BEST MATCH</span>' : '';
+            let cardStyle = isBest ? 'border:1.5px solid #ff007f;background:linear-gradient(135deg, rgba(255,0,127,0.1), rgba(25,12,43,0.8));' : '';
 
             html += `
-                <div class="uge-card" style="${cardStyle}">
+                <div class="anime-card" style="${cardStyle}">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:10px;font-weight:bold;color:#00ff66;">${badge}#${i+1} [TYPE:${item.type.toUpperCase()}] [RANK:${item.score}]</div>
+                        <div style="font-size:11px;font-weight:700;color:#fff;">${badge}#${i+1} <span style="color:#b1a2c8;font-size:10px;">(${item.type} | Score: ${item.score})</span></div>
                         <div style="display:flex;gap:4px;">
-                            <button class="uge-blank uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">BLANK</button>
-                            <button class="uge-preview uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">VIEW</button>
-                            <button class="uge-copy uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">COPY</button>
-                            <button class="uge-open uge-btn" data-url="${item.url}" style="padding:3px 8px;font-size:9px;background:#00ff66;color:#000;">HIJACK</button>
+                            <button class="uge-blank anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">BLANK</button>
+                            <button class="uge-preview anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">VIEW</button>
+                            <button class="uge-copy anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">COPY</button>
+                            <button class="uge-open anime-btn" data-url="${item.url}" style="padding:4px 9px;font-size:10px;background:#00f0ff;color:#000;border:none;box-shadow:0 0 10px rgba(0,240,255,0.4);">OPEN</button>
                         </div>
                     </div>
-                    <div style="font-size:9px;color:#00dd55;word-break:break-all;opacity:0.85;">${item.url}</div>
+                    <div style="font-size:10px;color:#d1c4e9;word-break:break-all;font-family:monospace;opacity:0.85;">${item.url}</div>
                 </div>
             `;
         });
         html += `</div>`;
     } else {
-        html += `<div style="border:1px dashed #ff0055;background:rgba(255,0,85,0.05);padding:12px;border-radius:6px;margin-bottom:14px;font-size:10px;color:#ff0055;text-align:center;">&gt; NO_VALID_TARGETS_DETECTED. INITIATE GAMEPLAY & HIT RESCAN.</div>`;
+        html += `<div style="background:rgba(255,0,127,0.08);border:1px solid rgba(255,0,127,0.3);padding:14px;border-radius:14px;margin-bottom:16px;font-size:12px;color:#ff66b2;font-weight:600;text-align:center;">💫 No game streams detected yet. Interact with the game on the page first, then hit Rescan!</div>`;
     }
 
     html += `
-        <div style="display:flex;gap:8px;">
-            <button id="uge-rescan" class="uge-btn" style="flex:1;padding:10px;font-size:11px;">&gt; RESCAN_MEMORY</button>
-            <button id="uge-close" class="uge-btn" style="flex:1;padding:10px;font-size:11px;border-color:#555;color:#aaa;background:#000;">&gt; DISCONNECT</button>
+        <div style="display:flex;gap:10px;">
+            <button id="uge-rescan" class="anime-btn" style="flex:1;padding:12px;font-size:12px;font-weight:900;">🔄 RESCAN PAGE</button>
+            <button id="uge-close" class="anime-btn" style="flex:1;padding:12px;font-size:12px;color:#aaa;background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);">CLOSE</button>
         </div>
     `;
 
@@ -291,7 +288,7 @@
             if (win) {
                 win.document.write(`
                     <html style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;">
-                        <head><title>System Diagnostics</title></head>
+                        <head><title>Dashboard</title></head>
                         <body style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;">
                             <iframe src="${u}" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
                         </body>
@@ -307,12 +304,12 @@
             navigator.clipboard.writeText(u).then(() => {
                 let orig = this.innerText;
                 this.innerText = 'COPIED!';
-                this.style.background = '#00ff66';
+                this.style.background = '#00f0ff';
                 this.style.color = '#000';
                 setTimeout(() => { 
                     this.innerText = orig; 
-                    this.style.background = '#001a0d';
-                    this.style.color = '#00ff66';
+                    this.style.background = '';
+                    this.style.color = '';
                 }, 1500);
             });
         };
@@ -332,11 +329,11 @@
 
             let overlay = document.createElement('div');
             overlay.id = 'uge-preview-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0510;z-index:9999999;display:flex;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:#021006;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #00ff66;font-family:monospace;">
-                    <span style="color:#00ff66;font-size:11px;font-weight:bold;">&gt; STEALTH_PREVIEW: ${u}</span>
-                    <button id="uge-close-preview" class="uge-btn" style="background:#ff0055;color:#fff;border:none;padding:5px 12px;font-size:10px;">TERMINATE_PREVIEW</button>
+                <div style="background:#12081f;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,0,127,0.3);">
+                    <span style="color:#00f0ff;font-size:12px;font-weight:900;">🌸 ANIME PREVIEW: ${u}</span>
+                    <button id="uge-close-preview" class="anime-btn" style="background:#ff007f;color:#fff;border:none;padding:6px 14px;font-size:11px;">EXIT</button>
                 </div>
                 <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
             `;
