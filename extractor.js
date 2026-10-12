@@ -24,7 +24,7 @@
         const blockedKeywords = [
             'ads', 'analytics', 'telemetry', 'consent', 'login', 'auth', 
             'pixel', 'googletagmanager', 'google.com/maps', 'docs.google.com', 'apis.google.com',
-            'facebook', 'twitter', 'discord', 'telegram'
+            'facebook', 'twitter', 'discord', 'telegram', 'embed-banner', 'banner', 'watermark', 'branding'
         ];
         if (blockedKeywords.some(keyword => lower.includes(keyword))) return;
         
