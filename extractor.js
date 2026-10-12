@@ -1,5 +1,4 @@
 (function(){
-    // Remove existing modal if already running
     if(window._gameExtractorActive) {
         let old = document.getElementById('ultimate-game-extractor');
         if(old) old.remove();
@@ -8,9 +7,8 @@
 
     let foundItems = [];
 
-    // Helper to resolve relative paths into absolute URLs
     function resolveUrl(url) {
-        if (!url || url === 'about:blank' || url.startsWith('javascript:')) return null;
+        if (!url || url === 'about:blank' || url.startsWith('javascript:') || url.startsWith('blob:about')) return null;
         try {
             return new URL(url, document.baseURI).href;
         } catch(e) {
@@ -18,51 +16,67 @@
         }
     }
 
-    // Helper to evaluate, score, and push candidate URLs
     function analyzeAndAdd(rawSrc, type) {
         let src = resolveUrl(rawSrc);
         if (!src) return;
         let lower = src.toLowerCase();
         
-        // Comprehensive filter for tracking, ads, and platform wrappers
         const blockedKeywords = [
             'ads', 'analytics', 'telemetry', 'consent', 'login', 'auth', 
-            'pixel', 'googletagmanager', 'google.com/maps', 'docs.google.com'
+            'pixel', 'googletagmanager', 'google.com/maps', 'docs.google.com', 'apis.google.com'
         ];
         if (blockedKeywords.some(keyword => lower.includes(keyword))) return;
         
-        // Avoid duplicate entries
         if (!foundItems.some(item => item.url === src)) {
             let score = 0;
-            
-            // Heuristic scoring based on game indicators
             if (lower.includes('game') || lower.includes('play') || lower.includes('index') || lower.includes('embed') || lower.endsWith('.html')) score += 15;
             if (lower.includes('blob:') || lower.includes('cdn') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 8;
-            if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames')) score += 10;
+            if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames') || lower.includes('poki')) score += 12;
             
             if (type === 'iframe') score += 5;
             if (type === 'data-attr') score += 4;
+            if (type === 'script-regex') score += 6;
             if (type === 'link') score += 2;
             
             foundItems.push({ url: src, type: type, score: score });
         }
     }
 
-    // Deep recursive scanner supporting Shadow DOM and all nested nodes
+    // 1. Scan Scripts and JSON configs for hidden game paths
+    function scanScripts() {
+        try {
+            document.querySelectorAll('script').forEach(s => {
+                let content = s.textContent || s.innerText || '';
+                // Regex to find URLs ending in .html or containing game parameters
+                let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9])\/[^\s"'<>]+/gi) || [];
+                matches.forEach(m => analyzeAndAdd(m, 'script-regex'));
+                
+                // Regex for relative game paths inside JS configs
+                let relativeMatches = content.match(/["'](\/[^\s"'<>]+?\/(?:index|game|play)\.html)["']/gi) || [];
+                relativeMatches.forEach(m => {
+                    let cleaned = m.replace(/["']/g, '');
+                    analyzeAndAdd(cleaned, 'script-regex');
+                });
+            });
+        } catch(e) {}
+    }
+
+    // 2. Deep recursive scanner supporting Shadow DOM and nested frames
     function deepScan(root) {
         if (!root) return;
         try {
-            // 1. Standard frame elements
             root.querySelectorAll('iframe').forEach(f => {
-                analyzeAndAdd(f.src || f.getAttribute('data-src') || f.getAttribute('data-url'), 'iframe');
+                analyzeAndAdd(f.src || f.getAttribute('data-src') || f.getAttribute('data-url') || f.getAttribute('data-embed'), 'iframe');
+                // Try scanning inside iframe document if same-origin
+                try {
+                    if (f.contentDocument) deepScan(f.contentDocument);
+                } catch(err) {}
             });
 
-            // 2. Embed and object elements
             root.querySelectorAll('embed, object').forEach(e => {
                 analyzeAndAdd(e.src || e.data, 'media');
             });
 
-            // 3. Custom data attributes used by unblocked game sites & Google Sites
             const attributes = ['data-src', 'data-url', 'data-game', 'data-href', 'data-link', 'data-embed', 'data-iframe'];
             attributes.forEach(attr => {
                 root.querySelectorAll(`[${attr}]`).forEach(el => {
@@ -70,7 +84,6 @@
                 });
             });
 
-            // 4. Anchor links pointing to game subfolders or assets
             root.querySelectorAll('a[href]').forEach(a => {
                 let href = a.getAttribute('href');
                 if (href && (href.includes('game') || href.includes('play') || href.endsWith('.html') || href.includes('github.io') || href.includes('vercel.app'))) {
@@ -78,46 +91,42 @@
                 }
             });
 
-            // 5. Recursively traverse through open Shadow DOMs
             root.querySelectorAll('*').forEach(el => {
-                if (el.shadowRoot) {
-                    deepScan(el.shadowRoot);
-                }
+                if (el.shadowRoot) deepScan(el.shadowRoot);
             });
-        } catch(e) {
-            console.error('Scan error:', e);
-        }
+        } catch(e) {}
     }
 
-    // Execute scan and sort by top score
     deepScan(document);
+    scanScripts();
     foundItems.sort((a, b) => b.score - a.score);
 
-    // Build interactive Glassmorphism Dashboard UI
+    // Build Glassmorphism Dashboard UI with Preview Mode
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
-    container.style.cssText = 'position:fixed;top:15px;left:50%;transform:translateX(-50%);width:92%;max-width:540px;background:linear-gradient(135deg, #12121f, #1b1b2f);color:#fff;padding:22px;border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,0.85);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1px solid rgba(255,255,255,0.18);';
+    container.style.cssText = 'position:fixed;top:15px;left:50%;transform:translateX(-50%);width:94%;max-width:560px;background:linear-gradient(135deg, #0d0d1a, #16162b);color:#fff;padding:22px;border-radius:18px;box-shadow:0 25px 60px rgba(0,0,0,0.9);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1px solid rgba(0,255,204,0.3);';
 
     let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-            <h3 style="margin:0;font-size:18px;color:#00ffcc;display:flex;align-items:center;gap:8px;">🚀 Ultimate Game Extractor</h3>
-            <span style="font-size:11px;background:#0f3460;padding:5px 10px;border-radius:10px;color:#00ffcc;border:1px solid rgba(0,255,204,0.25);">Found: ${foundItems.length}</span>
+            <h3 style="margin:0;font-size:18px;color:#00ffcc;display:flex;align-items:center;gap:8px;">🚀 Ultimate Game Stealer v2</h3>
+            <span style="font-size:11px;background:#0f3460;padding:5px 10px;border-radius:10px;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);">Found: ${foundItems.length}</span>
         </div>
     `;
 
     if (foundItems.length > 0) {
-        html += `<p style="margin:0 0 12px 0;font-size:12px;color:#a0aab2;">Smart-ranked by match likelihood. Best option is pinned at the top:</p>`;
-        html += `<div style="max-height:260px;overflow-y:auto;margin-bottom:16px;padding-right:4px;">`;
+        html += `<p style="margin:0 0 12px 0;font-size:12px;color:#a0aab2;">Smart-matched game endpoints. Top choice is ready:</p>`;
+        html += `<div style="max-height:240px;overflow-y:auto;margin-bottom:16px;padding-right:4px;">`;
         
         foundItems.forEach((item, i) => {
             let badge = i === 0 ? '<span style="background:#e94560;color:#fff;font-size:9px;padding:2px 6px;border-radius:4px;margin-right:6px;font-weight:bold;">BEST MATCH</span>' : '';
             html += `
-                <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.07);">
+                <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.08);">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                         <div style="font-size:11px;color:#00ffcc;font-weight:600;">${badge}#${i+1} <span style="color:#888;font-weight:normal;">(${item.type})</span></div>
-                        <div style="display:flex;gap:6px;">
-                            <button class="uge-copy" data-url="${item.url}" style="background:#0f3460;color:#00ffcc;border:none;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">Copy</button>
-                            <button class="uge-open" data-url="${item.url}" style="background:#00ffcc;color:#000;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;">Open</button>
+                        <div style="display:flex;gap:5px;">
+                            <button class="uge-preview" data-url="${item.url}" style="background:#1f4068;color:#00ffcc;border:none;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">Preview</button>
+                            <button class="uge-copy" data-url="${item.url}" style="background:#0f3460;color:#00ffcc;border:none;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">Copy</button>
+                            <button class="uge-open" data-url="${item.url}" style="background:#00ffcc;color:#000;border:none;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;">Open</button>
                         </div>
                     </div>
                     <div style="font-size:10px;color:#ccc;word-break:break-all;opacity:0.8;line-height:1.3;">${item.url}</div>
@@ -126,7 +135,7 @@
         });
         html += `</div>`;
     } else {
-        html += `<div style="background:rgba(255,87,87,0.1);border:1px solid rgba(255,87,87,0.2);padding:14px;border-radius:10px;margin-bottom:15px;font-size:12px;color:#ff8888;">No games found. Make sure the game canvas or frame is fully loaded on the screen, then try scanning again.</div>`;
+        html += `<div style="background:rgba(255,87,87,0.1);border:1px solid rgba(255,87,87,0.2);padding:14px;border-radius:10px;margin-bottom:15px;font-size:12px;color:#ff8888;">No games detected yet. Interact or start the game on the page first, then hit Rescan.</div>`;
     }
 
     html += `
@@ -139,7 +148,7 @@
     container.innerHTML = html;
     document.body.appendChild(container);
 
-    // Event handling for UI buttons
+    // Event handling
     container.querySelectorAll('.uge-copy').forEach(btn => {
         btn.onclick = function() {
             let u = this.getAttribute('data-url');
@@ -157,14 +166,36 @@
         };
     });
 
+    container.querySelectorAll('.uge-preview').forEach(btn => {
+        btn.onclick = function() {
+            let u = this.getAttribute('data-url');
+            let prevBox = document.getElementById('uge-preview-overlay');
+            if(prevBox) prevBox.remove();
+
+            let overlay = document.createElement('div');
+            overlay.id = 'uge-preview-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.9);z-index:9999999;display:flex;flex-direction:column;';
+            overlay.innerHTML = `
+                <div style="background:#111;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;">
+                    <span style="color:#00ffcc;font-size:12px;font-weight:bold;">🎮 Preview Mode: ${u}</span>
+                    <button id="uge-close-preview" style="background:#e94560;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:bold;cursor:pointer;">Close Preview</button>
+                </div>
+                <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
+            `;
+            document.body.appendChild(overlay);
+
+            document.getElementById('uge-close-preview').onclick = function() {
+                overlay.remove();
+            };
+        };
+    });
+
     document.getElementById('uge-rescan').onclick = function() {
         container.remove();
         window._gameExtractorActive = false;
-        // Re-trigger execution
         setTimeout(() => {
-            let script = document.createElement('script');
-            script.src = document.currentScript ? document.currentScript.src : '';
-            location.reload();
+            fetch(document.currentScript ? document.currentScript.src : 'https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js')
+                .then(r => r.text()).then(c => eval(c));
         }, 100);
     };
 
