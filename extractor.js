@@ -30,16 +30,26 @@
         
         if (!foundItems.some(item => item.url === src)) {
             let score = 0;
-            if (lower.includes('game') || lower.includes('play') || lower.includes('index') || lower.includes('embed') || lower.endsWith('.html')) score += 15;
-            if (lower.includes('blob:') || lower.includes('cdn') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 8;
-            if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames') || lower.includes('poki') || lower.includes('emulator')) score += 12;
-            
-            if (type === 'global-var') score += 20;
-            if (type === 'iframe') score += 5;
-            if (type === 'script-regex') score += 6;
-            if (type === 'universal-attr') score += 4;
+
+            // 1. Heavy scoring for game path structures
+            if (lower.includes('/game/') || lower.includes('/play/') || lower.includes('/embed/') || lower.includes('/v3/')) score += 35;
+            if (lower.endsWith('.html') || lower.includes('index.html')) score += 20;
+            if (lower.includes('game') || lower.includes('play')) score += 10;
+
+            // 2. Heavy scoring for recognized game CDN and hosting providers
+            if (lower.includes('crazygames') || lower.includes('msnfun') || lower.includes('poki') || lower.includes('itch.io')) score += 40;
+            if (lower.includes('blob:') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev') || lower.includes('cdn')) score += 25;
+
+            // 3. Source type weight
+            if (type === 'global-var') score += 50; // Global variables / emulators are usually direct game pointers
+            if (type === 'iframe') score += 15;
+            if (type === 'script-regex') score += 10;
+            if (type === 'universal-attr') score += 5;
             if (type === 'link') score += 2;
-            
+
+            // 4. Penalties for homepage wrappers or portal roots
+            if (lower === location.origin + '/' || lower === location.href || lower.endsWith('/index.php')) score -= 50;
+
             foundItems.push({ url: src, type: type, score: score });
         }
     }
