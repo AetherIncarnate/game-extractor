@@ -5,7 +5,7 @@
     }
     window._gameExtractorActive = true;
 
-    // Default Options Configuration
+    // Persistent Settings
     let settings = {
         excludeImages: true,
         onlyHtmlOrGame: false,
@@ -21,9 +21,9 @@
 
     let foundItems = [];
 
-    // Extract core domain name (e.g., "startmyeducation.net" -> "startmyeducation")
+    // Extract core domain name
     let currentHost = location.hostname.replace(/^www\./, '');
-    let coreDomain = currentHost.split('.')[0] || '';
+    let coreDomain = currentHost.split('.')[0] || 'localhost';
 
     function resolveUrl(url) {
         if (!url || url === 'about:blank' || url.startsWith('javascript:') || url.startsWith('blob:about')) return null;
@@ -34,8 +34,25 @@
         }
     }
 
+    // Decode URI / Base64 / Ultraviolet Proxy Strings
+    function decodeProxyUrl(raw) {
+        if (!raw) return raw;
+        try {
+            if (raw.includes('%3A%2F%2F') || raw.includes('%2F')) {
+                let decoded = decodeURIComponent(raw);
+                if (decoded.startsWith('http')) return decoded;
+            }
+            if (raw.length > 20 && !raw.includes(' ') && !raw.includes('/')) {
+                let b64 = atob(raw);
+                if (b64.startsWith('http://') || b64.startsWith('https://')) return b64;
+            }
+        } catch(e) {}
+        return raw;
+    }
+
     function analyzeAndAdd(rawSrc, type) {
-        let src = resolveUrl(rawSrc);
+        let decodedSrc = decodeProxyUrl(rawSrc);
+        let src = resolveUrl(decodedSrc);
         if (!src) return;
         let lower = src.toLowerCase();
         
@@ -57,27 +74,22 @@
         if (!foundItems.some(item => item.url === src)) {
             let score = 0;
 
-            if (lower.includes('/game/') || lower.includes('/play/') || lower.includes('/embed/') || lower.includes('/v3/')) score += 35;
+            if (lower.includes('/game/') || lower.includes('/play/') || lower.includes('/embed/') || lower.includes('/v3/') || lower.includes('/g/')) score += 35;
             if (lower.endsWith('.html') || lower.includes('index.html')) score += 25;
             if (lower.includes('game') || lower.includes('play')) score += 10;
 
-            // 1. Same Domain & Subdomain Boost (e.g., cdn.startmyeducation.net/game)
             if (settings.boostSameDomain && coreDomain.length > 3) {
-                if (lower.includes(coreDomain)) {
-                    score += 35;
-                }
+                if (lower.includes(coreDomain)) score += 45;
             }
 
-            // 2. Heavy CDN Keyword Scoring
-            if (settings.prioritizeCdn && (lower.includes('cdn') || lower.includes('storage') || lower.includes('aws') || lower.includes('cloudflare'))) score += 25;
+            if (settings.prioritizeCdn && (lower.includes('cdn') || lower.includes('storage') || lower.includes('aws') || lower.includes('cloudflare'))) score += 30;
 
-            // 3. Recognized Game Providers
             if (lower.includes('crazygames') || lower.includes('msnfun') || lower.includes('poki') || lower.includes('itch.io')) score += 40;
             if (lower.includes('blob:') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 25;
 
             if (type === 'global-var') score += 50;
-            if (type === 'iframe') score += 15;
-            if (type === 'script-regex') score += 10;
+            if (type === 'iframe') score += 20;
+            if (type === 'script-regex') score += 12;
             if (type === 'universal-attr') score += 5;
             if (type === 'link') score += 2;
 
@@ -91,9 +103,12 @@
 
     function scanGlobalVariables() {
         try {
-            const keys = ['gameUrl', 'gGameUrl', 'EJS_gameUrl', 'gameSrc', 'embedUrl', 'iframeUrl', 'uGameUrl', 'gamePath'];
+            const keys = ['gameUrl', 'gGameUrl', 'EJS_gameUrl', 'gameSrc', 'embedUrl', 'iframeUrl', 'uGameUrl', 'gamePath', '__uv$config'];
             keys.forEach(k => {
-                if (window[k]) analyzeAndAdd(window[k], 'global-var');
+                if (window[k]) {
+                    if (typeof window[k] === 'string') analyzeAndAdd(window[k], 'global-var');
+                    else if (typeof window[k] === 'object' && window[k].url) analyzeAndAdd(window[k].url, 'global-var');
+                }
             });
             if (window.config && window.config.gameUrl) analyzeAndAdd(window.config.gameUrl, 'global-var');
             if (window.gameConfig && window.gameConfig.url) analyzeAndAdd(window.gameConfig.url, 'global-var');
@@ -105,7 +120,7 @@
         try {
             document.querySelectorAll('script').forEach(s => {
                 let content = s.textContent || s.innerText || '';
-                let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9]|roms|builds|cdn)\/[^\s"'<>]+/gi) || [];
+                let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9]|roms|builds|cdn|g)\/[^\s"'<>]+/gi) || [];
                 matches.forEach(m => analyzeAndAdd(m, 'script-regex'));
                 
                 let jsonMatches = content.match(/["']https?:\/\/[^\s"'<>]+?\.(?:html|json|zip|swf|js)["']/gi) || [];
@@ -150,80 +165,101 @@
     deepScan(document);
     foundItems.sort((a, b) => b.score - a.score);
 
+    // Build Hacker Terminal UI
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
-    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:540px;background:#09090e;color:#fff;padding:22px;border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,0.95), 0 0 30px rgba(0,255,204,0.15);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1px solid rgba(0,255,204,0.4);backdrop-filter:blur(16px);';
+    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:#030a05;color:#00ff66;padding:22px;border-radius:12px;box-shadow:0 0 50px rgba(0,255,102,0.25), 0 0 100px rgba(0,0,0,0.95);z-index:999999;font-family:"Courier New", Courier, monospace;box-sizing:border-box;border:1px solid #00ff66;backdrop-filter:blur(20px);';
 
     let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
-            <h3 style="margin:0;font-size:18px;font-weight:900;color:#00ffcc;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;text-shadow:0 0 10px rgba(0,255,204,0.4);">⚡ GAME STEALER <span style="font-size:10px;background:rgba(0,255,204,0.1);color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:2px 6px;border-radius:6px;">v4.2</span></h3>
-            <div style="display:flex;gap:6px;">
-                <button id="uge-toggle-settings" style="background:#13131f;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:5px 10px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;">⚙️ OPTIONS</button>
-                <span style="font-size:11px;font-weight:bold;background:#13131f;padding:5px 10px;border-radius:8px;color:#00ffcc;border:1px solid rgba(0,255,204,0.2);">FOUND: ${foundItems.length}</span>
+        <style>
+            #ultimate-game-extractor::-webkit-scrollbar { width: 4px; }
+            #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #00ff66; }
+            .uge-btn { background:#001a0d; color:#00ff66; border:1px solid #00ff66; font-family:"Courier New", Courier, monospace; font-weight:bold; cursor:pointer; text-transform:uppercase; transition:all 0.15s ease-in-out; }
+            .uge-btn:hover { background:#00ff66; color:#000; box-shadow:0 0 12px #00ff66; }
+            .uge-card { background:#021006; border:1px solid rgba(0,255,102,0.25); padding:10px; border-radius:6px; margin-bottom:8px; position:relative; }
+            .uge-card:hover { border-color:#00ff66; box-shadow:0 0 10px rgba(0,255,102,0.2); }
+            @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+            .uge-blink { animation: pulse 1.2s infinite; }
+        </style>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #00ff66;padding-bottom:10px;">
+            <div style="font-size:15px;font-weight:bold;letter-spacing:1px;display:flex;align-items:center;gap:8px;">
+                <span class="uge-blink" style="color:#00ff66;">[SYSTEM_SNIFFER_v5.5]</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="uge-toggle-settings" class="uge-btn" style="padding:4px 8px;font-size:10px;">[SYS_CONFIG]</button>
+                <span style="font-size:11px;background:#002b15;padding:4px 8px;border-radius:4px;border:1px solid #00ff66;color:#00ff66;">HOSTS: ${foundItems.length}</span>
             </div>
         </div>
 
-        <div id="uge-settings-panel" style="display:none;background:#12121c;border:1px solid rgba(0,255,204,0.2);padding:14px;border-radius:12px;margin-bottom:14px;font-size:11px;">
-            <div style="font-weight:bold;color:#00ffcc;margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase;">Extraction Tweaks & Filters</div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00ffcc;"> Boost Links Matching Current Domain (${coreDomain})
+        <div style="font-size:10px;color:#00bb44;margin-bottom:12px;letter-spacing:0.5px;line-height:1.2;">
+            &gt; STATUS: INFILTRATED ROOT DOMAIN [${coreDomain}]<br>
+            &gt; PARSING: SHADOW_DOM / SCRIPT_PAYLOADS / PROXY_WRAPPERS
+        </div>
+
+        <div id="uge-settings-panel" style="display:none;background:#011408;border:1px dashed #00ff66;padding:12px;border-radius:6px;margin-bottom:12px;font-size:10px;">
+            <div style="font-weight:bold;color:#00ff66;margin-bottom:8px;">&gt; OVERRIDE_PARAMETERS:</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00ff66;"> BOOST_SAME_DOMAIN_TARGETS (${coreDomain})
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00ffcc;"> Exclude Image Files (png, jpg, svg, etc.)
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00ff66;"> PURGE_STATIC_IMAGE_PAYLOADS (png, jpg, svg)
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#00ffcc;"> Strict Mode (Only .html / Game / CDN endpoints)
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#00ff66;"> STRICT_EXPLOIT_MODE (.html / CDN / Game Endpoints)
                 </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#00ffcc;"> Heavy Boost for CDN & Storage Links
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#00ff66;"> PRIORITY_SCORES_FOR_CLOUD_CDNS
                 </label>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#aaa;">
-                    <span>Minimum Score Threshold:</span>
-                    <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#09090e;color:#fff;border:1px solid #333;padding:4px;border-radius:4px;text-align:center;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                    <span>MINIMUM_SCORE_CUTOFF:</span>
+                    <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:45px;background:#001a0d;color:#00ff66;border:1px solid #00ff66;padding:2px;text-align:center;">
                 </div>
             </div>
-            <button id="uge-save-settings" style="width:100%;background:#00ffcc;color:#000;border:none;margin-top:10px;padding:8px;border-radius:6px;font-weight:bold;cursor:pointer;">Save & Rescan</button>
+            <button id="uge-save-settings" class="uge-btn" style="width:100%;margin-top:10px;padding:6px;font-size:10px;">&gt; EXECUTE_OVERRIDE_RESCAN</button>
         </div>
     `;
 
     if (foundItems.length > 0) {
-        html += `<p style="margin:0 0 10px 0;font-size:11px;font-weight:600;color:#7a889b;letter-spacing:0.5px;text-transform:uppercase;">Target Acquired & Ranked:</p>`;
-        html += `<div style="max-height:240px;overflow-y:auto;margin-bottom:14px;padding-right:4px;scrollbar-width:thin;scrollbar-color:#00ffcc #12121c;">`;
+        html += `<div style="max-height:250px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">`;
         
         foundItems.forEach((item, i) => {
-            let badge = i === 0 ? '<span style="background:linear-gradient(135deg, #ff0055, #ff5500);color:#fff;font-size:9px;padding:3px 8px;border-radius:6px;margin-right:6px;font-weight:900;letter-spacing:0.5px;box-shadow:0 0 10px rgba(255,0,85,0.5);">🔥 BEST MATCH</span>' : '';
-            let borderStyle = i === 0 ? 'border:1px solid rgba(255,0,85,0.4);background:linear-gradient(135deg, rgba(255,0,85,0.05), rgba(18,18,28,0.6));' : 'border:1px solid rgba(255,255,255,0.06);background:#12121c;';
-            
+            let isBest = i === 0;
+            let badge = isBest ? '<span style="background:#00ff66;color:#000;font-size:8px;padding:2px 5px;border-radius:2px;margin-right:6px;font-weight:900;">[PRIMARY_MATCH]</span>' : '';
+            let cardStyle = isBest ? 'border:1px solid #00ff66;background:#00220d;box-shadow:0 0 10px rgba(0,255,102,0.3);' : '';
+
             html += `
-                <div style="${borderStyle}padding:12px;border-radius:12px;margin-bottom:10px;">
+                <div class="uge-card" style="${cardStyle}">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:11px;color:#fff;font-weight:700;">${badge}#${i+1} <span style="color:#566275;font-weight:500;font-size:10px;">(${item.type} | Score: ${item.score})</span></div>
-                        <div style="display:flex;gap:6px;">
-                            <button class="uge-preview" data-url="${item.url}" style="background:#1a1a2e;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer;font-weight:700;">PREVIEW</button>
-                            <button class="uge-copy" data-url="${item.url}" style="background:#1a1a2e;color:#fff;border:1px solid rgba(255,255,255,0.1);padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer;font-weight:700;">COPY</button>
-                            <button class="uge-open" data-url="${item.url}" style="background:#00ffcc;color:#000;border:none;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:900;cursor:pointer;box-shadow:0 0 12px rgba(0,255,204,0.4);">OPEN</button>
+                        <div style="font-size:10px;font-weight:bold;color:#00ff66;">${badge}#${i+1} [TYPE:${item.type.toUpperCase()}] [RANK:${item.score}]</div>
+                        <div style="display:flex;gap:4px;">
+                            <button class="uge-blank uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">BLANK</button>
+                            <button class="uge-preview uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">VIEW</button>
+                            <button class="uge-copy uge-btn" data-url="${item.url}" style="padding:3px 6px;font-size:9px;">COPY</button>
+                            <button class="uge-open uge-btn" data-url="${item.url}" style="padding:3px 8px;font-size:9px;background:#00ff66;color:#000;">HIJACK</button>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:#8a99ad;word-break:break-all;font-family:monospace;opacity:0.85;line-height:1.3;">${item.url}</div>
+                    <div style="font-size:9px;color:#00dd55;word-break:break-all;opacity:0.85;">${item.url}</div>
                 </div>
             `;
         });
         html += `</div>`;
     } else {
-        html += `<div style="background:rgba(255,0,85,0.08);border:1px solid rgba(255,0,85,0.2);padding:14px;border-radius:12px;margin-bottom:16px;font-size:12px;color:#ff6b8b;font-weight:600;text-align:center;">⚠️ No streams met the threshold. Try tweaking options or hitting RESCAN.</div>`;
+        html += `<div style="border:1px dashed #ff0055;background:rgba(255,0,85,0.05);padding:12px;border-radius:6px;margin-bottom:14px;font-size:10px;color:#ff0055;text-align:center;">&gt; NO_VALID_TARGETS_DETECTED. INITIATE GAMEPLAY & HIT RESCAN.</div>`;
     }
 
     html += `
-        <div style="display:flex;gap:10px;">
-            <button id="uge-rescan" style="flex:1;background:#13131f;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:12px;border-radius:10px;font-size:12px;font-weight:900;cursor:pointer;letter-spacing:0.5px;">🔄 RESCAN</button>
-            <button id="uge-close" style="flex:1;background:rgba(255,255,255,0.05);color:#8a99ad;border:1px solid rgba(255,255,255,0.08);padding:12px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">CLOSE</button>
+        <div style="display:flex;gap:8px;">
+            <button id="uge-rescan" class="uge-btn" style="flex:1;padding:10px;font-size:11px;">&gt; RESCAN_MEMORY</button>
+            <button id="uge-close" class="uge-btn" style="flex:1;padding:10px;font-size:11px;border-color:#555;color:#aaa;background:#000;">&gt; DISCONNECT</button>
         </div>
     `;
 
     container.innerHTML = html;
     document.body.appendChild(container);
 
+    // Event Listeners
     document.getElementById('uge-toggle-settings').onclick = function() {
         let panel = document.getElementById('uge-settings-panel');
         panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
@@ -248,18 +284,35 @@
         }, 100);
     };
 
+    container.querySelectorAll('.uge-blank').forEach(btn => {
+        btn.onclick = function() {
+            let u = this.getAttribute('data-url');
+            let win = window.open('about:blank', '_blank');
+            if (win) {
+                win.document.write(`
+                    <html style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;">
+                        <head><title>System Diagnostics</title></head>
+                        <body style="margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;">
+                            <iframe src="${u}" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
+                        </body>
+                    </html>
+                `);
+            }
+        };
+    });
+
     container.querySelectorAll('.uge-copy').forEach(btn => {
         btn.onclick = function() {
             let u = this.getAttribute('data-url');
             navigator.clipboard.writeText(u).then(() => {
                 let orig = this.innerText;
                 this.innerText = 'COPIED!';
-                this.style.background = '#00ffcc';
+                this.style.background = '#00ff66';
                 this.style.color = '#000';
                 setTimeout(() => { 
                     this.innerText = orig; 
-                    this.style.background = '#1a1a2e';
-                    this.style.color = '#fff';
+                    this.style.background = '#001a0d';
+                    this.style.color = '#00ff66';
                 }, 1500);
             });
         };
@@ -279,11 +332,11 @@
 
             let overlay = document.createElement('div');
             overlay.id = 'uge-preview-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#050508;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:9999999;display:flex;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:#09090e;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,255,204,0.2);">
-                    <span style="color:#00ffcc;font-size:12px;font-weight:900;font-family:monospace;">🎮 PREVIEW: ${u}</span>
-                    <button id="uge-close-preview" style="background:#ff0055;color:#fff;border:none;padding:6px 14px;border-radius:7px;font-weight:900;font-size:11px;cursor:pointer;box-shadow:0 0 10px rgba(255,0,85,0.4);">EXIT PREVIEW</button>
+                <div style="background:#021006;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #00ff66;font-family:monospace;">
+                    <span style="color:#00ff66;font-size:11px;font-weight:bold;">&gt; STEALTH_PREVIEW: ${u}</span>
+                    <button id="uge-close-preview" class="uge-btn" style="background:#ff0055;color:#fff;border:none;padding:5px 12px;font-size:10px;">TERMINATE_PREVIEW</button>
                 </div>
                 <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
             `;
