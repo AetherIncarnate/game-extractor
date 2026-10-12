@@ -34,7 +34,7 @@
             if (lower.includes('blob:') || lower.includes('cdn') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 8;
             if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames') || lower.includes('poki') || lower.includes('emulator')) score += 12;
             
-            if (type === 'global-var') score += 20; // Emulators/configs are usually direct hits
+            if (type === 'global-var') score += 20;
             if (type === 'iframe') score += 5;
             if (type === 'script-regex') score += 6;
             if (type === 'universal-attr') score += 4;
@@ -44,7 +44,6 @@
         }
     }
 
-    // 1. Sniff Global JavaScript variables and Emulator configs (e.g., EmulatorJS)
     function scanGlobalVariables() {
         try {
             const keys = ['gameUrl', 'gGameUrl', 'EJS_gameUrl', 'gameSrc', 'embedUrl', 'iframeUrl', 'uGameUrl', 'gamePath'];
@@ -57,7 +56,6 @@
         } catch(e) {}
     }
 
-    // 2. Scan script contents for hardcoded or JSON-embedded URLs
     function scanScripts() {
         try {
             document.querySelectorAll('script').forEach(s => {
@@ -71,7 +69,6 @@
         } catch(e) {}
     }
 
-    // 3. Deep recursive scanner for DOM, Shadow DOM, and all element attributes
     function deepScan(root) {
         if (!root) return;
         try {
@@ -86,7 +83,6 @@
                 analyzeAndAdd(e.src || e.data, 'media');
             });
 
-            // Universal attribute inspector on every element
             root.querySelectorAll('*').forEach(el => {
                 if (el.shadowRoot) deepScan(el.shadowRoot);
                 
@@ -115,7 +111,6 @@
     deepScan(document);
     foundItems.sort((a, b) => b.score - a.score);
 
-    // Dashboard UI
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
     container.style.cssText = 'position:fixed;top:15px;left:50%;transform:translateX(-50%);width:94%;max-width:560px;background:linear-gradient(135deg, #0d0d1a, #16162b);color:#fff;padding:22px;border-radius:18px;box-shadow:0 25px 60px rgba(0,0,0,0.9);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1px solid rgba(0,255,204,0.3);';
