@@ -5,10 +5,12 @@
     }
     window._gameExtractorActive = true;
 
+    // Default Options Configuration
     let settings = {
         excludeImages: true,
         onlyHtmlOrGame: false,
         prioritizeCdn: true,
+        boostSameDomain: true,
         minScore: 10
     };
 
@@ -18,6 +20,10 @@
     } catch(e) {}
 
     let foundItems = [];
+
+    // Extract core domain name (e.g., "startmyeducation.net" -> "startmyeducation")
+    let currentHost = location.hostname.replace(/^www\./, '');
+    let coreDomain = currentHost.split('.')[0] || '';
 
     function resolveUrl(url) {
         if (!url || url === 'about:blank' || url.startsWith('javascript:') || url.startsWith('blob:about')) return null;
@@ -55,8 +61,17 @@
             if (lower.endsWith('.html') || lower.includes('index.html')) score += 25;
             if (lower.includes('game') || lower.includes('play')) score += 10;
 
-            if (settings.prioritizeCdn && (lower.includes('cdn') || lower.includes('storage') || lower.includes('aws') || lower.includes('cloudflare'))) score += 30;
+            // 1. Same Domain & Subdomain Boost (e.g., cdn.startmyeducation.net/game)
+            if (settings.boostSameDomain && coreDomain.length > 3) {
+                if (lower.includes(coreDomain)) {
+                    score += 35;
+                }
+            }
 
+            // 2. Heavy CDN Keyword Scoring
+            if (settings.prioritizeCdn && (lower.includes('cdn') || lower.includes('storage') || lower.includes('aws') || lower.includes('cloudflare'))) score += 25;
+
+            // 3. Recognized Game Providers
             if (lower.includes('crazygames') || lower.includes('msnfun') || lower.includes('poki') || lower.includes('itch.io')) score += 40;
             if (lower.includes('blob:') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 25;
 
@@ -141,7 +156,7 @@
 
     let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
-            <h3 style="margin:0;font-size:18px;font-weight:900;color:#00ffcc;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;text-shadow:0 0 10px rgba(0,255,204,0.4);">⚡ GAME STEALER <span style="font-size:10px;background:rgba(0,255,204,0.1);color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:2px 6px;border-radius:6px;">v4.1</span></h3>
+            <h3 style="margin:0;font-size:18px;font-weight:900;color:#00ffcc;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;text-shadow:0 0 10px rgba(0,255,204,0.4);">⚡ GAME STEALER <span style="font-size:10px;background:rgba(0,255,204,0.1);color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:2px 6px;border-radius:6px;">v4.2</span></h3>
             <div style="display:flex;gap:6px;">
                 <button id="uge-toggle-settings" style="background:#13131f;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);padding:5px 10px;border-radius:8px;font-size:11px;font-weight:bold;cursor:pointer;">⚙️ OPTIONS</button>
                 <span style="font-size:11px;font-weight:bold;background:#13131f;padding:5px 10px;border-radius:8px;color:#00ffcc;border:1px solid rgba(0,255,204,0.2);">FOUND: ${foundItems.length}</span>
@@ -151,6 +166,9 @@
         <div id="uge-settings-panel" style="display:none;background:#12121c;border:1px solid rgba(0,255,204,0.2);padding:14px;border-radius:12px;margin-bottom:14px;font-size:11px;">
             <div style="font-weight:bold;color:#00ffcc;margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase;">Extraction Tweaks & Filters</div>
             <div style="display:flex;flex-direction:column;gap:8px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
+                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00ffcc;"> Boost Links Matching Current Domain (${coreDomain})
+                </label>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
                     <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00ffcc;"> Exclude Image Files (png, jpg, svg, etc.)
                 </label>
@@ -212,6 +230,7 @@
     };
 
     document.getElementById('uge-save-settings').onclick = function() {
+        settings.boostSameDomain = document.getElementById('opt-boost-domain').checked;
         settings.excludeImages = document.getElementById('opt-exclude-images').checked;
         settings.onlyHtmlOrGame = document.getElementById('opt-only-html').checked;
         settings.prioritizeCdn = document.getElementById('opt-prioritize-cdn').checked;
@@ -248,4 +267,45 @@
 
     container.querySelectorAll('.uge-open').forEach(btn => {
         btn.onclick = function() {
-            window.location.href = this.getAttribute('data
+            window.location.href = this.getAttribute('data-url');
+        };
+    });
+
+    container.querySelectorAll('.uge-preview').forEach(btn => {
+        btn.onclick = function() {
+            let u = this.getAttribute('data-url');
+            let prevBox = document.getElementById('uge-preview-overlay');
+            if(prevBox) prevBox.remove();
+
+            let overlay = document.createElement('div');
+            overlay.id = 'uge-preview-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#050508;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.innerHTML = `
+                <div style="background:#09090e;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,255,204,0.2);">
+                    <span style="color:#00ffcc;font-size:12px;font-weight:900;font-family:monospace;">🎮 PREVIEW: ${u}</span>
+                    <button id="uge-close-preview" style="background:#ff0055;color:#fff;border:none;padding:6px 14px;border-radius:7px;font-weight:900;font-size:11px;cursor:pointer;box-shadow:0 0 10px rgba(255,0,85,0.4);">EXIT PREVIEW</button>
+                </div>
+                <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
+            `;
+            document.body.appendChild(overlay);
+
+            document.getElementById('uge-close-preview').onclick = function() {
+                overlay.remove();
+            };
+        };
+    });
+
+    document.getElementById('uge-rescan').onclick = function() {
+        container.remove();
+        window._gameExtractorActive = false;
+        setTimeout(() => {
+            fetch('https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js?v=' + Date.now())
+                .then(r => r.text()).then(c => eval(c));
+        }, 100);
+    };
+
+    document.getElementById('uge-close').onclick = function() {
+        container.remove();
+        window._gameExtractorActive = false;
+    };
+})();
