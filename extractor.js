@@ -23,7 +23,8 @@
         
         const blockedKeywords = [
             'ads', 'analytics', 'telemetry', 'consent', 'login', 'auth', 
-            'pixel', 'googletagmanager', 'google.com/maps', 'docs.google.com', 'apis.google.com'
+            'pixel', 'googletagmanager', 'google.com/maps', 'docs.google.com', 'apis.google.com',
+            'facebook', 'twitter', 'discord', 'telegram'
         ];
         if (blockedKeywords.some(keyword => lower.includes(keyword))) return;
         
@@ -31,43 +32,51 @@
             let score = 0;
             if (lower.includes('game') || lower.includes('play') || lower.includes('index') || lower.includes('embed') || lower.endsWith('.html')) score += 15;
             if (lower.includes('blob:') || lower.includes('cdn') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 8;
-            if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames') || lower.includes('poki')) score += 12;
+            if (lower.includes('v3') || lower.includes('msnfun') || lower.includes('crazygames') || lower.includes('poki') || lower.includes('emulator')) score += 12;
             
+            if (type === 'global-var') score += 20; // Emulators/configs are usually direct hits
             if (type === 'iframe') score += 5;
-            if (type === 'data-attr') score += 4;
             if (type === 'script-regex') score += 6;
+            if (type === 'universal-attr') score += 4;
             if (type === 'link') score += 2;
             
             foundItems.push({ url: src, type: type, score: score });
         }
     }
 
-    // 1. Scan Scripts and JSON configs for hidden game paths
+    // 1. Sniff Global JavaScript variables and Emulator configs (e.g., EmulatorJS)
+    function scanGlobalVariables() {
+        try {
+            const keys = ['gameUrl', 'gGameUrl', 'EJS_gameUrl', 'gameSrc', 'embedUrl', 'iframeUrl', 'uGameUrl', 'gamePath'];
+            keys.forEach(k => {
+                if (window[k]) analyzeAndAdd(window[k], 'global-var');
+            });
+            if (window.config && window.config.gameUrl) analyzeAndAdd(window.config.gameUrl, 'global-var');
+            if (window.gameConfig && window.gameConfig.url) analyzeAndAdd(window.gameConfig.url, 'global-var');
+            if (window.EJS_options && window.EJS_options.gameUrl) analyzeAndAdd(window.EJS_options.gameUrl, 'global-var');
+        } catch(e) {}
+    }
+
+    // 2. Scan script contents for hardcoded or JSON-embedded URLs
     function scanScripts() {
         try {
             document.querySelectorAll('script').forEach(s => {
                 let content = s.textContent || s.innerText || '';
-                // Regex to find URLs ending in .html or containing game parameters
-                let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9])\/[^\s"'<>]+/gi) || [];
+                let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9]|roms|builds)\/[^\s"'<>]+/gi) || [];
                 matches.forEach(m => analyzeAndAdd(m, 'script-regex'));
                 
-                // Regex for relative game paths inside JS configs
-                let relativeMatches = content.match(/["'](\/[^\s"'<>]+?\/(?:index|game|play)\.html)["']/gi) || [];
-                relativeMatches.forEach(m => {
-                    let cleaned = m.replace(/["']/g, '');
-                    analyzeAndAdd(cleaned, 'script-regex');
-                });
+                let jsonMatches = content.match(/["']https?:\/\/[^\s"'<>]+?\.(?:html|json|zip|swf)["']/gi) || [];
+                jsonMatches.forEach(m => analyzeAndAdd(m.replace(/["']/g, ''), 'script-regex'));
             });
         } catch(e) {}
     }
 
-    // 2. Deep recursive scanner supporting Shadow DOM and nested frames
+    // 3. Deep recursive scanner for DOM, Shadow DOM, and all element attributes
     function deepScan(root) {
         if (!root) return;
         try {
             root.querySelectorAll('iframe').forEach(f => {
                 analyzeAndAdd(f.src || f.getAttribute('data-src') || f.getAttribute('data-url') || f.getAttribute('data-embed'), 'iframe');
-                // Try scanning inside iframe document if same-origin
                 try {
                     if (f.contentDocument) deepScan(f.contentDocument);
                 } catch(err) {}
@@ -77,11 +86,19 @@
                 analyzeAndAdd(e.src || e.data, 'media');
             });
 
-            const attributes = ['data-src', 'data-url', 'data-game', 'data-href', 'data-link', 'data-embed', 'data-iframe'];
-            attributes.forEach(attr => {
-                root.querySelectorAll(`[${attr}]`).forEach(el => {
-                    analyzeAndAdd(el.getAttribute(attr), 'data-attr');
-                });
+            // Universal attribute inspector on every element
+            root.querySelectorAll('*').forEach(el => {
+                if (el.shadowRoot) deepScan(el.shadowRoot);
+                
+                for (let attr of el.attributes) {
+                    let val = attr.value;
+                    if (val && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('/'))) {
+                        let lowerVal = val.toLowerCase();
+                        if (lowerVal.includes('game') || lowerVal.includes('play') || lowerVal.includes('embed') || lowerVal.endsWith('.html') || lowerVal.endsWith('.json') || lowerVal.endsWith('.zip')) {
+                            analyzeAndAdd(val, 'universal-attr');
+                        }
+                    }
+                }
             });
 
             root.querySelectorAll('a[href]').forEach(a => {
@@ -90,25 +107,22 @@
                     analyzeAndAdd(href, 'link');
                 }
             });
-
-            root.querySelectorAll('*').forEach(el => {
-                if (el.shadowRoot) deepScan(el.shadowRoot);
-            });
         } catch(e) {}
     }
 
-    deepScan(document);
+    scanGlobalVariables();
     scanScripts();
+    deepScan(document);
     foundItems.sort((a, b) => b.score - a.score);
 
-    // Build Glassmorphism Dashboard UI with Preview Mode
+    // Dashboard UI
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
     container.style.cssText = 'position:fixed;top:15px;left:50%;transform:translateX(-50%);width:94%;max-width:560px;background:linear-gradient(135deg, #0d0d1a, #16162b);color:#fff;padding:22px;border-radius:18px;box-shadow:0 25px 60px rgba(0,0,0,0.9);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1px solid rgba(0,255,204,0.3);';
 
     let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-            <h3 style="margin:0;font-size:18px;color:#00ffcc;display:flex;align-items:center;gap:8px;">🚀 Ultimate Game Stealer v2</h3>
+            <h3 style="margin:0;font-size:18px;color:#00ffcc;display:flex;align-items:center;gap:8px;">🚀 Universal Game Stealer v3</h3>
             <span style="font-size:11px;background:#0f3460;padding:5px 10px;border-radius:10px;color:#00ffcc;border:1px solid rgba(0,255,204,0.3);">Found: ${foundItems.length}</span>
         </div>
     `;
@@ -148,7 +162,6 @@
     container.innerHTML = html;
     document.body.appendChild(container);
 
-    // Event handling
     container.querySelectorAll('.uge-copy').forEach(btn => {
         btn.onclick = function() {
             let u = this.getAttribute('data-url');
@@ -194,7 +207,7 @@
         container.remove();
         window._gameExtractorActive = false;
         setTimeout(() => {
-            fetch(document.currentScript ? document.currentScript.src : 'https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js')
+            fetch('https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js')
                 .then(r => r.text()).then(c => eval(c));
         }, 100);
     };
