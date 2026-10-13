@@ -1,6 +1,6 @@
 (function(){
     if(window._gameExtractorActive) {
-        let old = document.getElementById('apple-game-extractor');
+        let old = document.getElementById('apple-liquid-extractor');
         if(old) old.remove();
     }
     window._gameExtractorActive = true;
@@ -196,64 +196,64 @@
         if (pollCount > 5) clearInterval(pollInterval);
     }, 1000);
 
-    // Build Apple HIG UI Container
+    // Build Apple Liquid Glass Dark UI Container
     let container = document.createElement('div');
-    container.id = 'apple-game-extractor';
-    container.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);width:92%;max-width:540px;background:#f5f5f7;color:#1d1d1f;padding:24px;border-radius:18px;box-shadow:0 20px 40px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.2);z-index:999999;font-family:SF Pro Text,system-ui,-apple-system,sans-serif;box-sizing:border-box;border:1px solid #e0e0e0;backdrop-filter:blur(20px);';
+    container.id = 'apple-liquid-extractor';
+    container.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);width:92%;max-width:540px;background:rgba(22, 22, 26, 0.75);color:#f5f5f7;padding:24px;border-radius:22px;box-shadow:0 30px 60px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.15);z-index:999999;font-family:SF Pro Text,system-ui,-apple-system,sans-serif;box-sizing:border-box;backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);';
 
     function renderHTML() {
         return `
             <style>
-                #apple-game-extractor::-webkit-scrollbar { width: 4px; }
-                #apple-game-extractor::-webkit-scrollbar-thumb { background: #d2d2d7; border-radius: 4px; }
-                .apple-btn { background: #ffffff; color: #0066cc; border: 1px solid #e0e0e0; font-family: inherit; font-weight: 400; cursor: pointer; border-radius: 9999px; transition: all 0.15s ease; font-size: 13px; padding: 6px 14px; }
-                .apple-btn:hover { background: #fafafc; border-color: #0066cc; }
+                #apple-liquid-extractor::-webkit-scrollbar { width: 4px; }
+                #apple-liquid-extractor::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+                .apple-btn { background: rgba(255,255,255,0.08); color: #2997ff; border: 1px solid rgba(255,255,255,0.12); font-family: inherit; font-weight: 400; cursor: pointer; border-radius: 9999px; transition: all 0.15s ease; font-size: 13px; padding: 6px 14px; }
+                .apple-btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.25); color: #ffffff; }
                 .apple-btn:active { transform: scale(0.95); }
-                .apple-btn-primary { background: #0066cc; color: #ffffff; border: none; font-weight: 500; }
+                .apple-btn-primary { background: #0A84FF; color: #ffffff; border: none; font-weight: 500; }
                 .apple-btn-primary:hover { background: #0071e3; color: #ffffff; }
-                .apple-card { background: #ffffff; border: 1px solid #e0e0e0; padding: 14px; border-radius: 11px; margin-bottom: 10px; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-                .apple-card:hover { border-color: #b0b0b0; }
-                .apple-badge { background: rgba(0,102,204,0.1); color: #0066cc; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-right: 6px; font-weight: 600; }
+                .apple-card { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); padding: 14px; border-radius: 14px; margin-bottom: 10px; transition: all 0.15s ease; }
+                .apple-card:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
+                .apple-badge { background: rgba(10, 132, 255, 0.2); color: #2997ff; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-right: 6px; font-weight: 600; border: 1px solid rgba(10, 132, 255, 0.3); }
             </style>
 
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #e0e0e0;padding-bottom:12px;">
-                <div style="font-family:SF Pro Display,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.28px;color:#1d1d1f;display:flex;align-items:center;gap:8px;">
-                    <span>Game Inspector</span> <span style="font-size:11px;background:#e0e0e0;color:#7a7a7a;padding:2px 8px;border-radius:9999px;font-weight:400;">macOS Edition</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+                <div style="font-family:SF Pro Display,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.28px;color:#ffffff;display:flex;align-items:center;gap:8px;">
+                    <span>Game Inspector</span> <span style="font-size:11px;background:rgba(255,255,255,0.1);color:#a1a1a6;padding:2px 8px;border-radius:9999px;font-weight:400;">Liquid Glass Dark</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button id="age-toggle-settings" class="apple-btn" style="padding:5px 12px;font-size:12px;">Settings</button>
-                    <span id="age-found-count" style="font-size:12px;font-weight:600;color:#7a7a7a;">${foundItems.length} found</span>
+                    <span id="age-found-count" style="font-size:12px;font-weight:600;color:#a1a1a6;">${foundItems.length} found</span>
                 </div>
             </div>
 
             <div style="display:flex;gap:8px;margin-bottom:12px;">
-                <input type="text" id="age-search" placeholder="Filter detected URLs..." style="flex:1;background:#ffffff;border:1px solid #e0e0e0;padding:9px 14px;border-radius:9999px;color:#1d1d1f;font-size:13px;outline:none;font-family:inherit;">
+                <input type="text" id="age-search" placeholder="Filter detected URLs..." style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);padding:9px 14px;border-radius:9999px;color:#ffffff;font-size:13px;outline:none;font-family:inherit;">
                 <button id="age-export" class="apple-btn" style="padding:9px 14px;font-size:12px;">Export</button>
             </div>
 
-            <div style="font-size:12px;color:#7a7a7a;margin-bottom:14px;display:flex;justify-content:space-between;">
-                <span>Target: <b style="color:#1d1d1f;">${coreDomain}</b></span>
-                <span style="color:#0066cc;">● Auto-Scanning Active</span>
+            <div style="font-size:12px;color:#a1a1a6;margin-bottom:14px;display:flex;justify-content:space-between;">
+                <span>Target: <b style="color:#ffffff;">${coreDomain}</b></span>
+                <span style="color:#30D158;">● Auto-Scanning Active</span>
             </div>
 
-            <div id="age-settings-panel" style="display:none;background:#ffffff;border:1px solid #e0e0e0;padding:16px;border-radius:11px;margin-bottom:14px;font-size:13px;">
-                <div style="font-weight:600;color:#1d1d1f;margin-bottom:10px;">Preferences</div>
+            <div id="age-settings-panel" style="display:none;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);padding:16px;border-radius:14px;margin-bottom:14px;font-size:13px;">
+                <div style="font-weight:600;color:#ffffff;margin-bottom:10px;">Preferences</div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
-                        <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#0066cc;"> Boost Same-Domain Links
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#d2d2d7;">
+                        <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#0A84FF;"> Boost Same-Domain Links
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
-                        <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#0066cc;"> Exclude Image Assets
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#d2d2d7;">
+                        <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#0A84FF;"> Exclude Image Assets
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
-                        <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#0066cc;"> Strict Mode (HTML/Game endpoints only)
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#d2d2d7;">
+                        <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#0A84FF;"> Strict Mode (HTML/Game endpoints only)
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
-                        <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#0066cc;"> Prioritize CDNs & Cloud Storage
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#d2d2d7;">
+                        <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#0A84FF;"> Prioritize CDNs & Cloud Storage
                     </label>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;color:#7a7a7a;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;color:#a1a1a6;">
                         <span>Minimum Score:</span>
-                        <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#f5f5f7;color:#1d1d1f;border:1px solid #e0e0e0;padding:4px;border-radius:6px;text-align:center;font-size:12px;">
+                        <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:rgba(0,0,0,0.4);color:#ffffff;border:1px solid rgba(255,255,255,0.2);padding:4px;border-radius:6px;text-align:center;font-size:12px;">
                     </div>
                 </div>
                 <button id="age-save-settings" class="apple-btn apple-btn-primary" style="width:100%;margin-top:12px;padding:8px;">Save & Re-inspect</button>
@@ -265,7 +265,7 @@
 
             <div style="display:flex;gap:8px;">
                 <button id="age-rescan" class="apple-btn" style="flex:1;padding:10px;font-weight:500;">Re-scan Page</button>
-                <button id="age-close" class="apple-btn" style="flex:1;padding:10px;color:#7a7a7a;background:transparent;border:none;">Dismiss</button>
+                <button id="age-close" class="apple-btn" style="flex:1;padding:10px;color:#a1a1a6;background:transparent;border:none;">Dismiss</button>
             </div>
         `;
     }
@@ -273,7 +273,7 @@
     function renderListItems(items, filter = '') {
         let filtered = items.filter(i => i.url.toLowerCase().includes(filter.toLowerCase()) || i.type.toLowerCase().includes(filter.toLowerCase()));
         if (filtered.length === 0) {
-            return `<div style="background:#ffffff;border:1px solid #e0e0e0;padding:16px;border-radius:11px;margin-bottom:10px;font-size:13px;color:#7a7a7a;text-align:center;">No game streams detected yet. Interact with the page or wait for assets to stream...</div>`;
+            return `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);padding:16px;border-radius:14px;margin-bottom:10px;font-size:13px;color:#a1a1a6;text-align:center;">No game streams detected yet. Interact with the page or wait for assets to stream...</div>`;
         }
         let html = '';
         filtered.forEach((item, i) => {
@@ -283,7 +283,7 @@
             html += `
                 <div class="apple-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:13px;font-weight:600;color:#1d1d1f;">${badge}#${i+1} <span style="color:#7a7a7a;font-size:11px;font-weight:400;">(${item.type} • Score: ${item.score})</span></div>
+                        <div style="font-size:13px;font-weight:600;color:#ffffff;">${badge}#${i+1} <span style="color:#a1a1a6;font-size:11px;font-weight:400;">(${item.type} • Score: ${item.score})</span></div>
                         <div style="display:flex;gap:6px;">
                             <button class="age-blank apple-btn" data-url="${item.url}" style="padding:3px 10px;font-size:11px;">Sandbox</button>
                             <button class="age-preview apple-btn" data-url="${item.url}" style="padding:3px 10px;font-size:11px;">Preview</button>
@@ -291,7 +291,7 @@
                             <button class="age-open apple-btn apple-btn-primary" data-url="${item.url}" style="padding:3px 12px;font-size:11px;">Open</button>
                         </div>
                     </div>
-                    <div style="font-size:11px;color:#7a7a7a;word-break:break-all;font-family:SF Mono,ui-monospace,monospace;">${item.url}</div>
+                    <div style="font-size:11px;color:#a1a1a6;word-break:break-all;font-family:SF Mono,ui-monospace,monospace;">${item.url}</div>
                 </div>
             `;
         });
@@ -395,10 +395,10 @@
 
             let overlay = document.createElement('div');
             overlay.id = 'age-preview-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#ffffff;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000000;z-index:9999999;display:flex;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:#f5f5f7;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0e0e0;font-family:SF Pro Text,system-ui,sans-serif;">
-                    <span style="color:#1d1d1f;font-size:13px;font-weight:500;">Preview: ${u}</span>
+                <div style="background:rgba(22, 22, 26, 0.85);padding:12px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);font-family:SF Pro Text,system-ui,sans-serif;backdrop-filter:blur(30px);">
+                    <span style="color:#ffffff;font-size:13px;font-weight:500;">Preview: ${u}</span>
                     <button id="age-close-preview" class="apple-btn apple-btn-primary" style="padding:6px 16px;">Close Preview</button>
                 </div>
                 <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
