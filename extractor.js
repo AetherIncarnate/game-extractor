@@ -5,7 +5,6 @@
     }
     window._gameExtractorActive = true;
 
-    // Persistent Settings
     let settings = {
         excludeImages: true,
         onlyHtmlOrGame: false,
@@ -23,7 +22,6 @@
     let currentHost = location.hostname.replace(/^www\./, '');
     let coreDomain = currentHost.split('.')[0] || 'localhost';
 
-    // Vector SF Symbols
     const SFSymbols = {
         gamecontroller: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6"/><path d="M6 12h4"/><path d="M8 10v4"/><circle cx="15" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="13" r="1" fill="currentColor"/></svg>`,
         gear: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
@@ -205,7 +203,6 @@
         if (pollCount > 5) clearInterval(pollInterval);
     }, 1000);
 
-    // Solid Apple Dark Mode Container
     let container = document.createElement('div');
     container.id = 'apple-dark-extractor';
     container.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);width:92%;max-width:560px;background:#1e1e20;color:#f5f5f7;padding:24px;border-radius:18px;box-shadow:0 24px 64px rgba(0, 0, 0, 0.7);z-index:999999;font-family:SF Pro Text,system-ui,-apple-system,sans-serif;box-sizing:border-box;border:1px solid #38383a;';
@@ -224,7 +221,6 @@
                 .apple-card:hover { border-color: #48484a; }
                 .apple-badge { background: rgba(10, 132, 255, 0.2); color: #0a84ff; font-size: 10px; padding: 2px 8px; border-radius: 9999px; margin-right: 6px; font-weight: 600; border: 1px solid rgba(10, 132, 255, 0.3); display: inline-flex; align-items: center; gap: 3px; }
 
-                /* Solid Apple Toggle Switch */
                 .apple-switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
                 .apple-switch input { opacity: 0; width: 0; height: 0; }
                 .apple-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #39393d; transition: .25s ease-in-out; border-radius: 22px; border: 1px solid #48484a; }
@@ -235,7 +231,7 @@
 
             <div id="age-drag-handle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #38383a;padding-bottom:12px;cursor:grab;">
                 <div style="font-family:SF Pro Display,system-ui,-apple-system,sans-serif;font-size:17px;font-weight:600;letter-spacing:-0.28px;color:#ffffff;display:flex;align-items:center;gap:8px;">
-                    <span style="color:#0a84ff;">${SFSymbols.gamecontroller}</span> <span>Game Inspector</span> <span style="font-size:10px;background:#2c2c2e;color:#8e8e93;padding:2px 8px;border-radius:9999px;font-weight:400;border:1px solid #38383a;">Dark Mode</span>
+                    <span style="color:#0a84ff;">${SFSymbols.gamecontroller}</span> <span>Game Inspector</span> <span style="font-size:10px;background:#2c2c2e;color:#8e8e93;padding:2px 8px;border-radius:9999px;font-weight:400;border:1px solid #38383a;">v19 Bundler</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button id="age-toggle-settings" class="apple-btn" style="padding:4px 11px;font-size:11px;">${SFSymbols.gear} Settings</button>
@@ -322,7 +318,7 @@
                         <div style="font-size:12px;font-weight:600;color:#ffffff;">${badge}#${i+1} <span style="color:#8e8e93;font-size:10px;font-weight:400;">(${item.type} • Score: ${item.score})</span></div>
                         <div style="display:flex;gap:4px;">
                             <button class="age-blank apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Open in Sandbox">${SFSymbols.safari} Sandbox</button>
-                            <button class="age-html apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Clean & Convert to Standalone HTML">${SFSymbols.docText} HTML</button>
+                            <button class="age-html apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Grab & Bundle Everything into Standalone HTML">${SFSymbols.docText} HTML</button>
                             <button class="age-copy apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Copy URL">${SFSymbols.docOnDoc}</button>
                             <button class="age-open apple-btn apple-btn-primary" data-url="${item.url}" style="padding:3px 11px;font-size:10px;">Open</button>
                         </div>
@@ -351,7 +347,6 @@
     container.innerHTML = renderHTML();
     document.body.appendChild(container);
 
-    // Draggable Panel
     let isDragging = false, offsetLeft = 0, offsetTop = 0;
     const dragHandle = document.getElementById('age-drag-handle');
     
@@ -375,7 +370,6 @@
         if(dragHandle) dragHandle.style.cursor = 'grab';
     };
 
-    // Container Interaction Delegation
     container.onclick = async function(e) {
         let target = e.target.closest('button') || e.target;
         
@@ -439,33 +433,51 @@
             }
         }
 
-        // HTML Source Stripper & Cleaner Converter
+        // Full Website Bundler & Cleaner Converter
         if (target.classList.contains('age-html')) {
             let u = target.getAttribute('data-url');
             let origText = target.innerHTML;
-            target.innerHTML = 'Cleaning...';
+            target.innerHTML = 'Grabbing...';
             try {
-                let response = await fetch(u, { mode: 'cors' }).catch(() => null);
+                // Fetch through CORS bypass proxy service / fallbacks to ensure everything is captured
+                let response = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(u)).catch(() => null);
                 let htmlContent = '';
+                
                 if (response && response.ok) {
-                    htmlContent = await response.text();
-                } else {
-                    htmlContent = `<!DOCTYPE html><html><head><title>Clean Game View</title><style>body,html{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}</style></head><body><iframe src="${u}" style="width:100%;height:100%;border:none;" allowfullscreen></iframe></body></html>`;
+                    let data = await response.json();
+                    htmlContent = data.contents;
                 }
 
-                htmlContent = htmlContent
-                    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, (match) => {
-                        if (match.toLowerCase().includes('game') || match.toLowerCase().includes('canvas') || match.toLowerCase().includes('webpack')) return match;
-                        return '';
-                    })
-                    .replace(/<iframe\b[^>]*src=["']https?:\/\/(?:www\.)?(?:googletagmanager|ads|facebook|twitter|discord|analytics)[^"']*["'][^>]*>.*?<\/iframe>/gi, '')
-                    .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:banner|ads|cookie|consent|telemetry|watermark)[^"']*["'][^>]*>.*?<\/div>/gi, '');
+                if (!htmlContent || htmlContent.length < 50) {
+                    let directResp = await fetch(u).catch(() => null);
+                    if (directResp && directResp.ok) {
+                        htmlContent = await directResp.text();
+                    }
+                }
+
+                if (!htmlContent || htmlContent.length < 50) {
+                    htmlContent = `<!DOCTYPE html><html><head><title>Standalone Game</title><style>body,html{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}</style></head><body><iframe src="${u}" style="width:100%;height:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard" allowfullscreen></iframe></body></html>`;
+                } else {
+                    // Inject absolute base URI so relative assets point back correctly
+                    if (!htmlContent.includes('<base ')) {
+                        htmlContent = htmlContent.replace('<head>', `<head><base href="${u}">`);
+                    }
+                    // Strip unwanted ad banners, telemetry scripts, or cookies
+                    htmlContent = htmlContent
+                        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, (m) => {
+                            let lm = m.toLowerCase();
+                            if (lm.includes('game') || lm.includes('canvas') || lm.includes('webpack') || lm.includes('unity') || lm.includes('engine')) return m;
+                            if (lm.includes('ads') || lm.includes('analytics') || lm.includes('telemetry') || lm.includes('tracker')) return '';
+                            return m;
+                        })
+                        .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:banner|ads|cookie|consent|telemetry|watermark)[^"']*["'][^>]*>.*?<\/div>/gi, '');
+                }
 
                 let blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
                 let url = URL.createObjectURL(blob);
                 let a = document.createElement('a');
                 a.href = url;
-                a.download = `clean-game-${Date.now()}.html`;
+                a.download = `bundled-game-${Date.now()}.html`;
                 a.click();
                 target.innerHTML = 'Done!';
                 setTimeout(() => { target.innerHTML = origText; }, 1500);
