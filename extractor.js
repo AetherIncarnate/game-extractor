@@ -1,6 +1,6 @@
 (function(){
     if(window._gameExtractorActive) {
-        let old = document.getElementById('ultimate-game-extractor');
+        let old = document.getElementById('apple-game-extractor');
         if(old) old.remove();
     }
     window._gameExtractorActive = true;
@@ -15,7 +15,7 @@
     };
 
     try {
-        let saved = localStorage.getItem('uge_settings');
+        let saved = localStorage.getItem('age_settings');
         if (saved) settings = Object.assign(settings, JSON.parse(saved));
     } catch(e) {}
 
@@ -159,7 +159,12 @@
         } catch(e) {}
     }
 
-    // Network Request Interception
+    // Initial scan execution
+    scanGlobalVariables();
+    scanScripts();
+    deepScan(document);
+
+    // Proactive Auto-Discovery: Network Interceptor
     try {
         const observer = new PerformanceObserver((list) => {
             for (let entry of list.getEntries()) {
@@ -171,76 +176,96 @@
         observer.observe({ entryTypes: ['resource'] });
     } catch(e) {}
 
-    scanGlobalVariables();
-    scanScripts();
-    deepScan(document);
+    // Proactive Auto-Discovery: DOM Mutation Observer for asynchronous content
+    try {
+        const domObserver = new MutationObserver((mutations) => {
+            let shouldScan = mutations.some(m => m.addedNodes.length > 0);
+            if (shouldScan) {
+                scanGlobalVariables();
+                deepScan(document);
+            }
+        });
+        domObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
 
-    // Build UI Container
+    let pollCount = 0;
+    let pollInterval = setInterval(() => {
+        scanGlobalVariables();
+        deepScan(document);
+        pollCount++;
+        if (pollCount > 5) clearInterval(pollInterval);
+    }, 1000);
+
+    // Build Apple HIG UI Container
     let container = document.createElement('div');
-    container.id = 'ultimate-game-extractor';
-    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:#090a0f;color:#e1e7ec;padding:22px;border-radius:20px;box-shadow:0 30px 90px rgba(0,0,0,0.95), 0 0 30px rgba(0,240,255,0.15);z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;border:1px solid rgba(0,240,255,0.3);backdrop-filter:blur(16px);';
+    container.id = 'apple-game-extractor';
+    container.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);width:92%;max-width:540px;background:#f5f5f7;color:#1d1d1f;padding:24px;border-radius:18px;box-shadow:0 20px 40px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.2);z-index:999999;font-family:SF Pro Text,system-ui,-apple-system,sans-serif;box-sizing:border-box;border:1px solid #e0e0e0;backdrop-filter:blur(20px);';
 
     function renderHTML() {
         return `
             <style>
-                #ultimate-game-extractor::-webkit-scrollbar { width: 5px; }
-                #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #00f0ff; border-radius: 4px; }
-                .onyx-btn { background: #12151e; color: #00f0ff; border: 1px solid rgba(0,240,255,0.3); font-family: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; transition: all 0.2s ease; }
-                .onyx-btn:hover { background: #00f0ff; color: #090a0f; border-color: #00f0ff; box-shadow: 0 0 12px rgba(0,240,255,0.5); }
-                .onyx-card { background: rgba(18, 21, 30, 0.7); border: 1px solid rgba(255,255,255,0.08); padding: 12px; border-radius: 12px; margin-bottom: 10px; transition: all 0.2s ease; }
-                .onyx-card:hover { border-color: #00f0ff; box-shadow: 0 0 15px rgba(0,240,255,0.15); }
-                .onyx-badge { background: #00f0ff; color: #090a0f; font-size: 9px; padding: 3px 7px; border-radius: 5px; margin-right: 6px; font-weight: 900; box-shadow: 0 0 8px rgba(0,240,255,0.4); }
+                #apple-game-extractor::-webkit-scrollbar { width: 4px; }
+                #apple-game-extractor::-webkit-scrollbar-thumb { background: #d2d2d7; border-radius: 4px; }
+                .apple-btn { background: #ffffff; color: #0066cc; border: 1px solid #e0e0e0; font-family: inherit; font-weight: 400; cursor: pointer; border-radius: 9999px; transition: all 0.15s ease; font-size: 13px; padding: 6px 14px; }
+                .apple-btn:hover { background: #fafafc; border-color: #0066cc; }
+                .apple-btn:active { transform: scale(0.95); }
+                .apple-btn-primary { background: #0066cc; color: #ffffff; border: none; font-weight: 500; }
+                .apple-btn-primary:hover { background: #0071e3; color: #ffffff; }
+                .apple-card { background: #ffffff; border: 1px solid #e0e0e0; padding: 14px; border-radius: 11px; margin-bottom: 10px; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+                .apple-card:hover { border-color: #b0b0b0; }
+                .apple-badge { background: rgba(0,102,204,0.1); color: #0066cc; font-size: 11px; padding: 2px 8px; border-radius: 9999px; margin-right: 6px; font-weight: 600; }
             </style>
 
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
-                <div style="font-size:15px;font-weight:900;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;">
-                    <span style="color:#00f0ff;">⚡ GAME EXTRACTOR</span> <span style="font-size:10px;background:rgba(0,240,255,0.1);color:#00f0ff;padding:2px 8px;border-radius:5px;border:1px solid rgba(0,240,255,0.25);">v9.0 ONYX</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #e0e0e0;padding-bottom:12px;">
+                <div style="font-family:SF Pro Display,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.28px;color:#1d1d1f;display:flex;align-items:center;gap:8px;">
+                    <span>Game Inspector</span> <span style="font-size:11px;background:#e0e0e0;color:#7a7a7a;padding:2px 8px;border-radius:9999px;font-weight:400;">macOS Edition</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                    <button id="uge-toggle-settings" class="onyx-btn" style="padding:5px 10px;font-size:11px;">⚙️ OPTIONS</button>
-                    <span id="uge-found-count" style="font-size:11px;font-weight:bold;background:#12151e;padding:5px 10px;border-radius:6px;color:#00f0ff;border:1px solid rgba(0,240,255,0.2);">FOUND: ${foundItems.length}</span>
+                    <button id="age-toggle-settings" class="apple-btn" style="padding:5px 12px;font-size:12px;">Settings</button>
+                    <span id="age-found-count" style="font-size:12px;font-weight:600;color:#7a7a7a;">${foundItems.length} found</span>
                 </div>
             </div>
 
             <div style="display:flex;gap:8px;margin-bottom:12px;">
-                <input type="text" id="uge-search" placeholder="🔍 Search extracted URLs..." style="flex:1;background:#12151e;border:1px solid rgba(0,240,255,0.25);padding:8px 12px;border-radius:8px;color:#fff;font-size:11px;outline:none;">
-                <button id="uge-export" class="onyx-btn" style="padding:8px 12px;font-size:11px;">📥 EXPORT</button>
+                <input type="text" id="age-search" placeholder="Filter detected URLs..." style="flex:1;background:#ffffff;border:1px solid #e0e0e0;padding:9px 14px;border-radius:9999px;color:#1d1d1f;font-size:13px;outline:none;font-family:inherit;">
+                <button id="age-export" class="apple-btn" style="padding:9px 14px;font-size:12px;">Export</button>
             </div>
 
-            <div style="font-size:11px;color:#9aa7b2;margin-bottom:14px;letter-spacing:0.3px;">
-                🎯 Domain: <b style="color:#00f0ff;">${coreDomain}</b> | Live Interceptor: <span style="color:#00ff66;">Active</span>
+            <div style="font-size:12px;color:#7a7a7a;margin-bottom:14px;display:flex;justify-content:space-between;">
+                <span>Target: <b style="color:#1d1d1f;">${coreDomain}</b></span>
+                <span style="color:#0066cc;">● Auto-Scanning Active</span>
             </div>
 
-            <div id="uge-settings-panel" style="display:none;background:#0d0f17;border:1px solid rgba(0,240,255,0.3);padding:14px;border-radius:12px;margin-bottom:14px;font-size:11px;">
-                <div style="font-weight:900;color:#00f0ff;margin-bottom:10px;letter-spacing:0.5px;text-transform:uppercase;">⚙️ Scan Controls & Filters</div>
+            <div id="age-settings-panel" style="display:none;background:#ffffff;border:1px solid #e0e0e0;padding:16px;border-radius:11px;margin-bottom:14px;font-size:13px;">
+                <div style="font-weight:600;color:#1d1d1f;margin-bottom:10px;">Preferences</div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
-                        <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00f0ff;"> Boost Same-Domain Links
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
+                        <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#0066cc;"> Boost Same-Domain Links
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
-                        <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00f0ff;"> Exclude Image Files
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
+                        <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#0066cc;"> Exclude Image Assets
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
-                        <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#00f0ff;"> Strict Mode (.html / game endpoints)
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
+                        <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#0066cc;"> Strict Mode (HTML/Game endpoints only)
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
-                        <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#00f0ff;"> Prioritize Cloud CDNs
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#333333;">
+                        <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#0066cc;"> Prioritize CDNs & Cloud Storage
                     </label>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#888;">
-                        <span>Minimum Score Threshold:</span>
-                        <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#12151e;color:#00f0ff;border:1px solid rgba(0,240,255,0.3);padding:4px;border-radius:6px;text-align:center;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;color:#7a7a7a;">
+                        <span>Minimum Score:</span>
+                        <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#f5f5f7;color:#1d1d1f;border:1px solid #e0e0e0;padding:4px;border-radius:6px;text-align:center;font-size:12px;">
                     </div>
                 </div>
-                <button id="uge-save-settings" class="onyx-btn" style="width:100%;margin-top:12px;padding:8px;font-weight:900;">Save & Rescan ✨</button>
+                <button id="age-save-settings" class="apple-btn apple-btn-primary" style="width:100%;margin-top:12px;padding:8px;">Save & Re-inspect</button>
             </div>
 
-            <div id="uge-list-container" style="max-height:240px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">
+            <div id="age-list-container" style="max-height:240px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">
                 ${renderListItems(foundItems)}
             </div>
 
-            <div style="display:flex;gap:10px;">
-                <button id="uge-rescan" class="onyx-btn" style="flex:1;padding:12px;font-size:12px;font-weight:900;">🔄 RESCAN PAGE</button>
-                <button id="uge-close" class="onyx-btn" style="flex:1;padding:12px;font-size:12px;color:#888;background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.08);">CLOSE</button>
+            <div style="display:flex;gap:8px;">
+                <button id="age-rescan" class="apple-btn" style="flex:1;padding:10px;font-weight:500;">Re-scan Page</button>
+                <button id="age-close" class="apple-btn" style="flex:1;padding:10px;color:#7a7a7a;background:transparent;border:none;">Dismiss</button>
             </div>
         `;
     }
@@ -248,26 +273,25 @@
     function renderListItems(items, filter = '') {
         let filtered = items.filter(i => i.url.toLowerCase().includes(filter.toLowerCase()) || i.type.toLowerCase().includes(filter.toLowerCase()));
         if (filtered.length === 0) {
-            return `<div style="background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);padding:14px;border-radius:12px;margin-bottom:16px;font-size:12px;color:#00f0ff;font-weight:600;text-align:center;">⚡ No matching streams detected yet. Interact with the game on the page first!</div>`;
+            return `<div style="background:#ffffff;border:1px solid #e0e0e0;padding:16px;border-radius:11px;margin-bottom:10px;font-size:13px;color:#7a7a7a;text-align:center;">No game streams detected yet. Interact with the page or wait for assets to stream...</div>`;
         }
         let html = '';
         filtered.forEach((item, i) => {
             let isBest = items.indexOf(item) === 0;
-            let badge = isBest ? `<span class="onyx-badge">TOP MATCH</span>` : '';
-            let cardStyle = isBest ? `border:1px solid #00f0ff;background:rgba(0,240,255,0.08);` : '';
+            let badge = isBest ? `<span class="apple-badge">Top Match</span>` : '';
 
             html += `
-                <div class="onyx-card" style="${cardStyle}">
+                <div class="apple-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:11px;font-weight:700;color:#fff;">${badge}#${i+1} <span style="color:#7f8c98;font-size:10px;">(${item.type} | Score: ${item.score})</span></div>
-                        <div style="display:flex;gap:4px;">
-                            <button class="uge-blank onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">BLANK</button>
-                            <button class="uge-preview onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">VIEW</button>
-                            <button class="uge-copy onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">COPY</button>
-                            <button class="uge-open onyx-btn" data-url="${item.url}" style="padding:4px 9px;font-size:10px;background:#00f0ff;color:#090a0f;border:none;font-weight:bold;">OPEN</button>
+                        <div style="font-size:13px;font-weight:600;color:#1d1d1f;">${badge}#${i+1} <span style="color:#7a7a7a;font-size:11px;font-weight:400;">(${item.type} • Score: ${item.score})</span></div>
+                        <div style="display:flex;gap:6px;">
+                            <button class="age-blank apple-btn" data-url="${item.url}" style="padding:3px 10px;font-size:11px;">Sandbox</button>
+                            <button class="age-preview apple-btn" data-url="${item.url}" style="padding:3px 10px;font-size:11px;">Preview</button>
+                            <button class="age-copy apple-btn" data-url="${item.url}" style="padding:3px 10px;font-size:11px;">Copy</button>
+                            <button class="age-open apple-btn apple-btn-primary" data-url="${item.url}" style="padding:3px 12px;font-size:11px;">Open</button>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:#b2c0cc;word-break:break-all;font-family:monospace;">${item.url}</div>
+                    <div style="font-size:11px;color:#7a7a7a;word-break:break-all;font-family:SF Mono,ui-monospace,monospace;">${item.url}</div>
                 </div>
             `;
         });
@@ -275,15 +299,15 @@
     }
 
     function updateUIList() {
-        let listContainer = document.getElementById('uge-list-container');
-        let foundCount = document.getElementById('uge-found-count');
-        let searchInput = document.getElementById('uge-search');
+        let listContainer = document.getElementById('age-list-container');
+        let foundCount = document.getElementById('age-found-count');
+        let searchInput = document.getElementById('age-search');
         if (listContainer) {
             let filter = searchInput ? searchInput.value : '';
             listContainer.innerHTML = renderListItems(foundItems, filter);
         }
         if (foundCount) {
-            foundCount.innerText = `FOUND: ${foundItems.length}`;
+            foundCount.innerText = `${foundItems.length} found`;
         }
     }
 
@@ -294,27 +318,21 @@
     container.onclick = function(e) {
         let target = e.target;
         
-        if (target.id === 'uge-toggle-settings') {
-            let panel = document.getElementById('uge-settings-panel');
+        if (target.id === 'age-toggle-settings') {
+            let panel = document.getElementById('age-settings-panel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
         }
 
-        if (target.id === 'uge-save-settings') {
+        if (target.id === 'age-save-settings') {
             settings.boostSameDomain = document.getElementById('opt-boost-domain').checked;
             settings.excludeImages = document.getElementById('opt-exclude-images').checked;
             settings.onlyHtmlOrGame = document.getElementById('opt-only-html').checked;
             settings.prioritizeCdn = document.getElementById('opt-prioritize-cdn').checked;
             settings.minScore = parseInt(document.getElementById('opt-min-score').value) || 10;
             
-            try { localStorage.setItem('uge_settings', JSON.stringify(settings)); } catch(e) {}
+            try { localStorage.setItem('age_settings', JSON.stringify(settings)); } catch(e) {}
 
             container.innerHTML = renderHTML();
-            scanGlobalVariables();
-            scanScripts();
-            deepScan(document);
-        }
-
-        if (target.id === 'uge-rescan') {
             foundItems = [];
             scanGlobalVariables();
             scanScripts();
@@ -322,22 +340,30 @@
             updateUIList();
         }
 
-        if (target.id === 'uge-close') {
+        if (target.id === 'age-rescan') {
+            foundItems = [];
+            scanGlobalVariables();
+            scanScripts();
+            deepScan(document);
+            updateUIList();
+        }
+
+        if (target.id === 'age-close') {
+            clearInterval(pollInterval);
             container.remove();
             window._gameExtractorActive = false;
         }
 
-        if (target.id === 'uge-export') {
+        if (target.id === 'age-export') {
             let blob = new Blob([JSON.stringify(foundItems, null, 2)], { type: 'application/json' });
             let url = URL.createObjectURL(blob);
             let a = document.createElement('a');
             a.href = url;
-            a.download = `${coreDomain}-extracted-games.json`;
+            a.download = `${coreDomain}-inspected-games.json`;
             a.click();
         }
 
-        // Action Buttons
-        if (target.classList.contains('uge-blank')) {
+        if (target.classList.contains('age-blank')) {
             let u = target.getAttribute('data-url');
             let win = window.open('about:blank', '_blank');
             if (win) {
@@ -351,42 +377,42 @@
                 `);
             }
         }
-        if (target.classList.contains('uge-copy')) {
+        if (target.classList.contains('age-copy')) {
             let u = target.getAttribute('data-url');
             navigator.clipboard.writeText(u).then(() => {
                 let orig = target.innerText;
-                target.innerText = 'COPIED!';
+                target.innerText = 'Copied';
                 setTimeout(() => { target.innerText = orig; }, 1500);
             });
         }
-        if (target.classList.contains('uge-open')) {
+        if (target.classList.contains('age-open')) {
             window.location.href = target.getAttribute('data-url');
         }
-        if (target.classList.contains('uge-preview')) {
+        if (target.classList.contains('age-preview')) {
             let u = target.getAttribute('data-url');
-            let prevBox = document.getElementById('uge-preview-overlay');
+            let prevBox = document.getElementById('age-preview-overlay');
             if(prevBox) prevBox.remove();
 
             let overlay = document.createElement('div');
-            overlay.id = 'uge-preview-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.id = 'age-preview-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#ffffff;z-index:9999999;display:flex;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:#090a0f;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,240,255,0.3);">
-                    <span style="color:#00f0ff;font-size:12px;font-weight:900;">PREVIEW: ${u}</span>
-                    <button id="uge-close-preview" class="onyx-btn" style="background:#00f0ff;color:#090a0f;border:none;padding:6px 14px;font-size:11px;font-weight:bold;">EXIT</button>
+                <div style="background:#f5f5f7;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0e0e0;font-family:SF Pro Text,system-ui,sans-serif;">
+                    <span style="color:#1d1d1f;font-size:13px;font-weight:500;">Preview: ${u}</span>
+                    <button id="age-close-preview" class="apple-btn apple-btn-primary" style="padding:6px 16px;">Close Preview</button>
                 </div>
                 <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
             `;
             document.body.appendChild(overlay);
 
-            document.getElementById('uge-close-preview').onclick = function() {
+            document.getElementById('age-close-preview').onclick = function() {
                 overlay.remove();
             };
         }
     };
 
     container.oninput = function(e) {
-        if (e.target.id === 'uge-search') {
+        if (e.target.id === 'age-search') {
             updateUIList();
         }
     };
