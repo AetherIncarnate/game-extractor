@@ -16,11 +16,10 @@
 
     try {
         let saved = localStorage.getItem('uge_settings');
-        if (saved) settings = JSON.parse(saved);
+        if (saved) settings = Object.assign(settings, JSON.parse(saved));
     } catch(e) {}
 
     let foundItems = [];
-
     let currentHost = location.hostname.replace(/^www\./, '');
     let coreDomain = currentHost.split('.')[0] || 'localhost';
 
@@ -74,7 +73,7 @@
 
             if (lower.includes('/game/') || lower.includes('/play/') || lower.includes('/embed/') || lower.includes('/v3/') || lower.includes('/g/')) score += 35;
             if (lower.endsWith('.html') || lower.includes('index.html')) score += 25;
-            if (lower.includes('game') || lower.includes('play')) score += 10;
+            if (lower.includes('game') || lower.includes('play') || lower.includes('wasm') || lower.includes('unity')) score += 15;
 
             if (settings.boostSameDomain && coreDomain.length > 3) {
                 if (lower.includes(coreDomain)) score += 45;
@@ -85,7 +84,7 @@
             if (lower.includes('crazygames') || lower.includes('msnfun') || lower.includes('poki') || lower.includes('itch.io')) score += 40;
             if (lower.includes('blob:') || lower.includes('github.io') || lower.includes('vercel.app') || lower.includes('pages.dev')) score += 25;
 
-            if (type === 'global-var') score += 50;
+            if (type === 'global-var' || type === 'network-intercept') score += 50;
             if (type === 'iframe') score += 20;
             if (type === 'script-regex') score += 12;
             if (type === 'universal-attr') score += 5;
@@ -95,6 +94,8 @@
 
             if (score >= settings.minScore) {
                 foundItems.push({ url: src, type: type, score: score });
+                foundItems.sort((a, b) => b.score - a.score);
+                updateUIList();
             }
         }
     }
@@ -121,7 +122,7 @@
                 let matches = content.match(/https?:\/\/[^\s"'<>]+?\/(?:game|play|embed|v[0-9]|roms|builds|cdn|g)\/[^\s"'<>]+/gi) || [];
                 matches.forEach(m => analyzeAndAdd(m, 'script-regex'));
                 
-                let jsonMatches = content.match(/["']https?:\/\/[^\s"'<>]+?\.(?:html|json|zip|swf|js)["']/gi) || [];
+                let jsonMatches = content.match(/["']https?:\/\/[^\s"'<>]+?\.(?:html|json|zip|swf|js|wasm)["']/gi) || [];
                 jsonMatches.forEach(m => analyzeAndAdd(m.replace(/["']/g, ''), 'script-regex'));
             });
         } catch(e) {}
@@ -158,132 +159,186 @@
         } catch(e) {}
     }
 
+    // Network Request Interception
+    try {
+        const observer = new PerformanceObserver((list) => {
+            for (let entry of list.getEntries()) {
+                if (entry.initiatorType === 'fetch' || entry.initiatorType === 'xmlhttprequest' || entry.initiatorType === 'iframe') {
+                    analyzeAndAdd(entry.name, 'network-intercept');
+                }
+            }
+        });
+        observer.observe({ entryTypes: ['resource'] });
+    } catch(e) {}
+
     scanGlobalVariables();
     scanScripts();
     deepScan(document);
-    foundItems.sort((a, b) => b.score - a.score);
 
-    // Build Anime Cyber-Neon UI
+    // Build UI Container
     let container = document.createElement('div');
     container.id = 'ultimate-game-extractor';
-    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:linear-gradient(135deg, #12081f, #0c0614);color:#fff;padding:22px;border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,0.9), 0 0 40px rgba(255,0,127,0.25);z-index:999999;font-family:-apple-system,system-ui,sans-serif;box-sizing:border-box;border:1.5px solid rgba(255,0,127,0.45);backdrop-filter:blur(20px);';
+    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:94%;max-width:580px;background:#090a0f;color:#e1e7ec;padding:22px;border-radius:20px;box-shadow:0 30px 90px rgba(0,0,0,0.95), 0 0 30px rgba(0,240,255,0.15);z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;border:1px solid rgba(0,240,255,0.3);backdrop-filter:blur(16px);';
 
-    let html = `
-        <style>
-            #ultimate-game-extractor::-webkit-scrollbar { width: 6px; }
-            #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #ff007f; border-radius: 4px; }
-            .anime-btn { background:linear-gradient(135deg, #25103a, #1a082b); color:#00f0ff; border:1px solid rgba(0,240,255,0.4); font-family:inherit; font-weight:700; cursor:pointer; border-radius:10px; transition:all 0.2s; }
-            .anime-btn:hover { background:linear-gradient(135deg, #ff007f, #b30059); color:#fff; border-color:#ff007f; box-shadow:0 0 15px rgba(255,0,127,0.5); }
-            .anime-card { background:rgba(25, 12, 43, 0.6); border:1px solid rgba(255,0,127,0.2); padding:12px; border-radius:14px; margin-bottom:10px; transition:all 0.2s; }
-            .anime-card:hover { border-color:#00f0ff; box-shadow:0 0 15px rgba(0,240,255,0.2); }
-            @keyframes animeGlow { 0% { opacity: 0.7; } 50% { opacity: 1; text-shadow:0 0 12px #ff007f; } 100% { opacity: 0.7; } }
-            .anime-title-glow { animation: animeGlow 2s infinite; }
-        </style>
+    function renderHTML() {
+        return `
+            <style>
+                #ultimate-game-extractor::-webkit-scrollbar { width: 5px; }
+                #ultimate-game-extractor::-webkit-scrollbar-thumb { background: #00f0ff; border-radius: 4px; }
+                .onyx-btn { background: #12151e; color: #00f0ff; border: 1px solid rgba(0,240,255,0.3); font-family: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; transition: all 0.2s ease; }
+                .onyx-btn:hover { background: #00f0ff; color: #090a0f; border-color: #00f0ff; box-shadow: 0 0 12px rgba(0,240,255,0.5); }
+                .onyx-card { background: rgba(18, 21, 30, 0.7); border: 1px solid rgba(255,255,255,0.08); padding: 12px; border-radius: 12px; margin-bottom: 10px; transition: all 0.2s ease; }
+                .onyx-card:hover { border-color: #00f0ff; box-shadow: 0 0 15px rgba(0,240,255,0.15); }
+                .onyx-badge { background: #00f0ff; color: #090a0f; font-size: 9px; padding: 3px 7px; border-radius: 5px; margin-right: 6px; font-weight: 900; box-shadow: 0 0 8px rgba(0,240,255,0.4); }
+            </style>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
-            <div style="font-size:16px;font-weight:900;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;">
-                <span class="anime-title-glow" style="color:#ff007f;">🌸 GAME STEALER</span> <span style="font-size:10px;background:rgba(0,240,255,0.15);color:#00f0ff;padding:2px 8px;border-radius:6px;border:1px solid rgba(0,240,255,0.3);">v6.0 OTARI</span>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-                <button id="uge-toggle-settings" class="anime-btn" style="padding:5px 10px;font-size:11px;">⚙️ OPTIONS</button>
-                <span style="font-size:11px;font-weight:bold;background:#1a082b;padding:5px 10px;border-radius:8px;color:#ff007f;border:1px solid rgba(255,0,127,0.3);">FOUND: ${foundItems.length}</span>
-            </div>
-        </div>
-
-        <div style="font-size:11px;color:#b1a2c8;margin-bottom:14px;letter-spacing:0.3px;line-height:1.4;">
-            ✨ Target Domain: <b style="color:#00f0ff;">${coreDomain}</b> | Engine Status: <span style="color:#00ff66;">Ready ✨</span>
-        </div>
-
-        <div id="uge-settings-panel" style="display:none;background:rgba(18, 8, 31, 0.95);border:1px solid rgba(0,240,255,0.3);padding:14px;border-radius:14px;margin-bottom:14px;font-size:11px;">
-            <div style="font-weight:900;color:#00f0ff;margin-bottom:10px;letter-spacing:0.5px;text-transform:uppercase;">⚙️ Customization & Filters</div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#ff007f;"> Boost Same-Domain Links (${coreDomain})
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#ff007f;"> Exclude Image Files (png, jpg, svg)
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#ff007f;"> Strict Mode (.html / Game / CDN endpoints)
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ddd;">
-                    <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#ff007f;"> Prioritize Cloud CDNs & Storage
-                </label>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#aaa;">
-                    <span>Minimum Score Threshold:</span>
-                    <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#0c0614;color:#00f0ff;border:1px solid rgba(0,240,255,0.3);padding:4px;border-radius:6px;text-align:center;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
+                <div style="font-size:15px;font-weight:900;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;">
+                    <span style="color:#00f0ff;">⚡ GAME EXTRACTOR</span> <span style="font-size:10px;background:rgba(0,240,255,0.1);color:#00f0ff;padding:2px 8px;border-radius:5px;border:1px solid rgba(0,240,255,0.25);">v9.0 ONYX</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="uge-toggle-settings" class="onyx-btn" style="padding:5px 10px;font-size:11px;">⚙️ OPTIONS</button>
+                    <span id="uge-found-count" style="font-size:11px;font-weight:bold;background:#12151e;padding:5px 10px;border-radius:6px;color:#00f0ff;border:1px solid rgba(0,240,255,0.2);">FOUND: ${foundItems.length}</span>
                 </div>
             </div>
-            <button id="uge-save-settings" class="anime-btn" style="width:100%;margin-top:12px;padding:8px;font-weight:900;">Save & Rescan ✨</button>
-        </div>
-    `;
 
-    if (foundItems.length > 0) {
-        html += `<div style="max-height:260px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">`;
-        
-        foundItems.forEach((item, i) => {
-            let isBest = i === 0;
-            let badge = isBest ? '<span style="background:linear-gradient(135deg, #ff007f, #ff66cc);color:#fff;font-size:9px;padding:3px 8px;border-radius:6px;margin-right:6px;font-weight:900;box-shadow:0 0 10px rgba(255,0,127,0.5);">💖 BEST MATCH</span>' : '';
-            let cardStyle = isBest ? 'border:1.5px solid #ff007f;background:linear-gradient(135deg, rgba(255,0,127,0.1), rgba(25,12,43,0.8));' : '';
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <input type="text" id="uge-search" placeholder="🔍 Search extracted URLs..." style="flex:1;background:#12151e;border:1px solid rgba(0,240,255,0.25);padding:8px 12px;border-radius:8px;color:#fff;font-size:11px;outline:none;">
+                <button id="uge-export" class="onyx-btn" style="padding:8px 12px;font-size:11px;">📥 EXPORT</button>
+            </div>
+
+            <div style="font-size:11px;color:#9aa7b2;margin-bottom:14px;letter-spacing:0.3px;">
+                🎯 Domain: <b style="color:#00f0ff;">${coreDomain}</b> | Live Interceptor: <span style="color:#00ff66;">Active</span>
+            </div>
+
+            <div id="uge-settings-panel" style="display:none;background:#0d0f17;border:1px solid rgba(0,240,255,0.3);padding:14px;border-radius:12px;margin-bottom:14px;font-size:11px;">
+                <div style="font-weight:900;color:#00f0ff;margin-bottom:10px;letter-spacing:0.5px;text-transform:uppercase;">⚙️ Scan Controls & Filters</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
+                        <input type="checkbox" id="opt-boost-domain" ${settings.boostSameDomain ? 'checked' : ''} style="accent-color:#00f0ff;"> Boost Same-Domain Links
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
+                        <input type="checkbox" id="opt-exclude-images" ${settings.excludeImages ? 'checked' : ''} style="accent-color:#00f0ff;"> Exclude Image Files
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
+                        <input type="checkbox" id="opt-only-html" ${settings.onlyHtmlOrGame ? 'checked' : ''} style="accent-color:#00f0ff;"> Strict Mode (.html / game endpoints)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#ccc;">
+                        <input type="checkbox" id="opt-prioritize-cdn" ${settings.prioritizeCdn ? 'checked' : ''} style="accent-color:#00f0ff;"> Prioritize Cloud CDNs
+                    </label>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#888;">
+                        <span>Minimum Score Threshold:</span>
+                        <input type="number" id="opt-min-score" value="${settings.minScore}" style="width:50px;background:#12151e;color:#00f0ff;border:1px solid rgba(0,240,255,0.3);padding:4px;border-radius:6px;text-align:center;">
+                    </div>
+                </div>
+                <button id="uge-save-settings" class="onyx-btn" style="width:100%;margin-top:12px;padding:8px;font-weight:900;">Save & Rescan ✨</button>
+            </div>
+
+            <div id="uge-list-container" style="max-height:240px;overflow-y:auto;margin-bottom:14px;padding-right:4px;">
+                ${renderListItems(foundItems)}
+            </div>
+
+            <div style="display:flex;gap:10px;">
+                <button id="uge-rescan" class="onyx-btn" style="flex:1;padding:12px;font-size:12px;font-weight:900;">🔄 RESCAN PAGE</button>
+                <button id="uge-close" class="onyx-btn" style="flex:1;padding:12px;font-size:12px;color:#888;background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.08);">CLOSE</button>
+            </div>
+        `;
+    }
+
+    function renderListItems(items, filter = '') {
+        let filtered = items.filter(i => i.url.toLowerCase().includes(filter.toLowerCase()) || i.type.toLowerCase().includes(filter.toLowerCase()));
+        if (filtered.length === 0) {
+            return `<div style="background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2);padding:14px;border-radius:12px;margin-bottom:16px;font-size:12px;color:#00f0ff;font-weight:600;text-align:center;">⚡ No matching streams detected yet. Interact with the game on the page first!</div>`;
+        }
+        let html = '';
+        filtered.forEach((item, i) => {
+            let isBest = items.indexOf(item) === 0;
+            let badge = isBest ? `<span class="onyx-badge">TOP MATCH</span>` : '';
+            let cardStyle = isBest ? `border:1px solid #00f0ff;background:rgba(0,240,255,0.08);` : '';
 
             html += `
-                <div class="anime-card" style="${cardStyle}">
+                <div class="onyx-card" style="${cardStyle}">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:11px;font-weight:700;color:#fff;">${badge}#${i+1} <span style="color:#b1a2c8;font-size:10px;">(${item.type} | Score: ${item.score})</span></div>
+                        <div style="font-size:11px;font-weight:700;color:#fff;">${badge}#${i+1} <span style="color:#7f8c98;font-size:10px;">(${item.type} | Score: ${item.score})</span></div>
                         <div style="display:flex;gap:4px;">
-                            <button class="uge-blank anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">BLANK</button>
-                            <button class="uge-preview anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">VIEW</button>
-                            <button class="uge-copy anime-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">COPY</button>
-                            <button class="uge-open anime-btn" data-url="${item.url}" style="padding:4px 9px;font-size:10px;background:#00f0ff;color:#000;border:none;box-shadow:0 0 10px rgba(0,240,255,0.4);">OPEN</button>
+                            <button class="uge-blank onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">BLANK</button>
+                            <button class="uge-preview onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">VIEW</button>
+                            <button class="uge-copy onyx-btn" data-url="${item.url}" style="padding:4px 7px;font-size:10px;">COPY</button>
+                            <button class="uge-open onyx-btn" data-url="${item.url}" style="padding:4px 9px;font-size:10px;background:#00f0ff;color:#090a0f;border:none;font-weight:bold;">OPEN</button>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:#d1c4e9;word-break:break-all;font-family:monospace;opacity:0.85;">${item.url}</div>
+                    <div style="font-size:10px;color:#b2c0cc;word-break:break-all;font-family:monospace;">${item.url}</div>
                 </div>
             `;
         });
-        html += `</div>`;
-    } else {
-        html += `<div style="background:rgba(255,0,127,0.08);border:1px solid rgba(255,0,127,0.3);padding:14px;border-radius:14px;margin-bottom:16px;font-size:12px;color:#ff66b2;font-weight:600;text-align:center;">💫 No game streams detected yet. Interact with the game on the page first, then hit Rescan!</div>`;
+        return html;
     }
 
-    html += `
-        <div style="display:flex;gap:10px;">
-            <button id="uge-rescan" class="anime-btn" style="flex:1;padding:12px;font-size:12px;font-weight:900;">🔄 RESCAN PAGE</button>
-            <button id="uge-close" class="anime-btn" style="flex:1;padding:12px;font-size:12px;color:#aaa;background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);">CLOSE</button>
-        </div>
-    `;
+    function updateUIList() {
+        let listContainer = document.getElementById('uge-list-container');
+        let foundCount = document.getElementById('uge-found-count');
+        let searchInput = document.getElementById('uge-search');
+        if (listContainer) {
+            let filter = searchInput ? searchInput.value : '';
+            listContainer.innerHTML = renderListItems(foundItems, filter);
+        }
+        if (foundCount) {
+            foundCount.innerText = `FOUND: ${foundItems.length}`;
+        }
+    }
 
-    container.innerHTML = html;
+    container.innerHTML = renderHTML();
     document.body.appendChild(container);
 
-    // Event Listeners
-    document.getElementById('uge-toggle-settings').onclick = function() {
-        let panel = document.getElementById('uge-settings-panel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-    };
-
-    document.getElementById('uge-save-settings').onclick = function() {
-        settings.boostSameDomain = document.getElementById('opt-boost-domain').checked;
-        settings.excludeImages = document.getElementById('opt-exclude-images').checked;
-        settings.onlyHtmlOrGame = document.getElementById('opt-only-html').checked;
-        settings.prioritizeCdn = document.getElementById('opt-prioritize-cdn').checked;
-        settings.minScore = parseInt(document.getElementById('opt-min-score').value) || 10;
+    // Event Handling
+    container.onclick = function(e) {
+        let target = e.target;
         
-        try {
-            localStorage.setItem('uge_settings', JSON.stringify(settings));
-        } catch(e) {}
+        if (target.id === 'uge-toggle-settings') {
+            let panel = document.getElementById('uge-settings-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
 
-        container.remove();
-        window._gameExtractorActive = false;
-        setTimeout(() => {
-            fetch('https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js?v=' + Date.now())
-                .then(r => r.text()).then(c => eval(c));
-        }, 100);
-    };
+        if (target.id === 'uge-save-settings') {
+            settings.boostSameDomain = document.getElementById('opt-boost-domain').checked;
+            settings.excludeImages = document.getElementById('opt-exclude-images').checked;
+            settings.onlyHtmlOrGame = document.getElementById('opt-only-html').checked;
+            settings.prioritizeCdn = document.getElementById('opt-prioritize-cdn').checked;
+            settings.minScore = parseInt(document.getElementById('opt-min-score').value) || 10;
+            
+            try { localStorage.setItem('uge_settings', JSON.stringify(settings)); } catch(e) {}
 
-    container.querySelectorAll('.uge-blank').forEach(btn => {
-        btn.onclick = function() {
-            let u = this.getAttribute('data-url');
+            container.innerHTML = renderHTML();
+            scanGlobalVariables();
+            scanScripts();
+            deepScan(document);
+        }
+
+        if (target.id === 'uge-rescan') {
+            foundItems = [];
+            scanGlobalVariables();
+            scanScripts();
+            deepScan(document);
+            updateUIList();
+        }
+
+        if (target.id === 'uge-close') {
+            container.remove();
+            window._gameExtractorActive = false;
+        }
+
+        if (target.id === 'uge-export') {
+            let blob = new Blob([JSON.stringify(foundItems, null, 2)], { type: 'application/json' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = `${coreDomain}-extracted-games.json`;
+            a.click();
+        }
+
+        // Action Buttons
+        if (target.classList.contains('uge-blank')) {
+            let u = target.getAttribute('data-url');
             let win = window.open('about:blank', '_blank');
             if (win) {
                 win.document.write(`
@@ -295,45 +350,30 @@
                     </html>
                 `);
             }
-        };
-    });
-
-    container.querySelectorAll('.uge-copy').forEach(btn => {
-        btn.onclick = function() {
-            let u = this.getAttribute('data-url');
+        }
+        if (target.classList.contains('uge-copy')) {
+            let u = target.getAttribute('data-url');
             navigator.clipboard.writeText(u).then(() => {
-                let orig = this.innerText;
-                this.innerText = 'COPIED!';
-                this.style.background = '#00f0ff';
-                this.style.color = '#000';
-                setTimeout(() => { 
-                    this.innerText = orig; 
-                    this.style.background = '';
-                    this.style.color = '';
-                }, 1500);
+                let orig = target.innerText;
+                target.innerText = 'COPIED!';
+                setTimeout(() => { target.innerText = orig; }, 1500);
             });
-        };
-    });
-
-    container.querySelectorAll('.uge-open').forEach(btn => {
-        btn.onclick = function() {
-            window.location.href = this.getAttribute('data-url');
-        };
-    });
-
-    container.querySelectorAll('.uge-preview').forEach(btn => {
-        btn.onclick = function() {
-            let u = this.getAttribute('data-url');
+        }
+        if (target.classList.contains('uge-open')) {
+            window.location.href = target.getAttribute('data-url');
+        }
+        if (target.classList.contains('uge-preview')) {
+            let u = target.getAttribute('data-url');
             let prevBox = document.getElementById('uge-preview-overlay');
             if(prevBox) prevBox.remove();
 
             let overlay = document.createElement('div');
             overlay.id = 'uge-preview-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0a0510;z-index:9999999;display:flex;flex-direction:column;';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:9999999;display:flex;flex-direction:column;';
             overlay.innerHTML = `
-                <div style="background:#12081f;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,0,127,0.3);">
-                    <span style="color:#00f0ff;font-size:12px;font-weight:900;">🌸 ANIME PREVIEW: ${u}</span>
-                    <button id="uge-close-preview" class="anime-btn" style="background:#ff007f;color:#fff;border:none;padding:6px 14px;font-size:11px;">EXIT</button>
+                <div style="background:#090a0f;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,240,255,0.3);">
+                    <span style="color:#00f0ff;font-size:12px;font-weight:900;">PREVIEW: ${u}</span>
+                    <button id="uge-close-preview" class="onyx-btn" style="background:#00f0ff;color:#090a0f;border:none;padding:6px 14px;font-size:11px;font-weight:bold;">EXIT</button>
                 </div>
                 <iframe src="${u}" style="flex:1;width:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard"></iframe>
             `;
@@ -342,20 +382,12 @@
             document.getElementById('uge-close-preview').onclick = function() {
                 overlay.remove();
             };
-        };
-    });
-
-    document.getElementById('uge-rescan').onclick = function() {
-        container.remove();
-        window._gameExtractorActive = false;
-        setTimeout(() => {
-            fetch('https://raw.githubusercontent.com/AetherIncarnate/game-stealer/main/extractor.js?v=' + Date.now())
-                .then(r => r.text()).then(c => eval(c));
-        }, 100);
+        }
     };
 
-    document.getElementById('uge-close').onclick = function() {
-        container.remove();
-        window._gameExtractorActive = false;
+    container.oninput = function(e) {
+        if (e.target.id === 'uge-search') {
+            updateUIList();
+        }
     };
 })();
