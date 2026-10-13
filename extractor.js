@@ -231,7 +231,7 @@
 
             <div id="age-drag-handle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #38383a;padding-bottom:12px;cursor:grab;">
                 <div style="font-family:SF Pro Display,system-ui,-apple-system,sans-serif;font-size:17px;font-weight:600;letter-spacing:-0.28px;color:#ffffff;display:flex;align-items:center;gap:8px;">
-                    <span style="color:#0a84ff;">${SFSymbols.gamecontroller}</span> <span>Game Inspector</span> <span style="font-size:10px;background:#2c2c2e;color:#8e8e93;padding:2px 8px;border-radius:9999px;font-weight:400;border:1px solid #38383a;">v19 Bundler</span>
+                    <span style="color:#0a84ff;">${SFSymbols.gamecontroller}</span> <span>Game Inspector</span> <span style="font-size:10px;background:#2c2c2e;color:#8e8e93;padding:2px 8px;border-radius:9999px;font-weight:400;border:1px solid #38383a;">v21 Harvester</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button id="age-toggle-settings" class="apple-btn" style="padding:4px 11px;font-size:11px;">${SFSymbols.gear} Settings</button>
@@ -318,7 +318,7 @@
                         <div style="font-size:12px;font-weight:600;color:#ffffff;">${badge}#${i+1} <span style="color:#8e8e93;font-size:10px;font-weight:400;">(${item.type} • Score: ${item.score})</span></div>
                         <div style="display:flex;gap:4px;">
                             <button class="age-blank apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Open in Sandbox">${SFSymbols.safari} Sandbox</button>
-                            <button class="age-html apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Grab & Bundle Everything into Standalone HTML">${SFSymbols.docText} HTML</button>
+                            <button class="age-html apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Harvest & Compile Everything into Standalone HTML">${SFSymbols.docText} HTML</button>
                             <button class="age-copy apple-btn" data-url="${item.url}" style="padding:3px 9px;font-size:10px;" title="Copy URL">${SFSymbols.docOnDoc}</button>
                             <button class="age-open apple-btn apple-btn-primary" data-url="${item.url}" style="padding:3px 11px;font-size:10px;">Open</button>
                         </div>
@@ -433,13 +433,12 @@
             }
         }
 
-        // Full Website Bundler & Cleaner Converter
+        // Maximum Asset Harvester & Banner-Stripping HTML Compiler
         if (target.classList.contains('age-html')) {
             let u = target.getAttribute('data-url');
             let origText = target.innerHTML;
-            target.innerHTML = 'Grabbing...';
+            target.innerHTML = 'Harvesting...';
             try {
-                // Fetch through CORS bypass proxy service / fallbacks to ensure everything is captured
                 let response = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(u)).catch(() => null);
                 let htmlContent = '';
                 
@@ -458,11 +457,11 @@
                 if (!htmlContent || htmlContent.length < 50) {
                     htmlContent = `<!DOCTYPE html><html><head><title>Standalone Game</title><style>body,html{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}</style></head><body><iframe src="${u}" style="width:100%;height:100%;border:none;" allow="autoplay; gamepad; fullscreen; keyboard" allowfullscreen></iframe></body></html>`;
                 } else {
-                    // Inject absolute base URI so relative assets point back correctly
                     if (!htmlContent.includes('<base ')) {
                         htmlContent = htmlContent.replace('<head>', `<head><base href="${u}">`);
                     }
-                    // Strip unwanted ad banners, telemetry scripts, or cookies
+
+                    // Aggressively strip out ad banners, top notification notices, Discord promotion links, and cookies
                     htmlContent = htmlContent
                         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, (m) => {
                             let lm = m.toLowerCase();
@@ -470,14 +469,20 @@
                             if (lm.includes('ads') || lm.includes('analytics') || lm.includes('telemetry') || lm.includes('tracker')) return '';
                             return m;
                         })
-                        .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:banner|ads|cookie|consent|telemetry|watermark)[^"']*["'][^>]*>.*?<\/div>/gi, '');
+                        .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:banner|ads|cookie|consent|telemetry|watermark|notice|alert|announcement|promo)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, (match) => {
+                            let lm = match.toLowerCase();
+                            if (lm.includes('discord') || lm.includes('main site') || lm.includes('check out') || lm.includes('banner')) return '';
+                            return match;
+                        })
+                        .replace(/<[^>]+>\s*hey[!\s]+check\s+out[\s\S]*?<\/?[^>]+>/gi, '')
+                        .replace(/<[^>]+>\s*join\s+the\s+discord[!\s]*<\/?[^>]+>/gi, '');
                 }
 
                 let blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
                 let url = URL.createObjectURL(blob);
                 let a = document.createElement('a');
                 a.href = url;
-                a.download = `bundled-game-${Date.now()}.html`;
+                a.download = `compiled-game-${Date.now()}.html`;
                 a.click();
                 target.innerHTML = 'Done!';
                 setTimeout(() => { target.innerHTML = origText; }, 1500);
