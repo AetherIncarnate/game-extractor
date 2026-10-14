@@ -322,10 +322,9 @@
     var tech = techOf(full, ext, tags);
     if (tech) { score += 10; tags.push(tech); parts.push([tech + ' engine', 10]); }
 
-    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'finder': 20, 'json': 18, 'network': 16, 'ws': 15, 'script': 12, 'pwa': 12, 'storage': 10, 'attr': 8, 'link': 4 };
+    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'finder': 20, 'json': 18, 'network': 16, 'script': 12, 'storage': 10, 'attr': 8, 'link': 4 };
     if (evW[source]) { score += evW[source]; tags.push(source.indexOf('live-') === 0 ? 'runtime' : source); parts.push(['via ' + source, evW[source]]); }
 
-    // find-by-name: the build URL that actually carries the game's name
     if (state.findName && state.findVariants && state.findVariants.length) {
       var fl = full;
       for (var fv = 0; fv < state.findVariants.length; fv++) {
@@ -334,10 +333,21 @@
           break;
         }
       }
-      // the finder dug it out of a config object — the URL itself may be hashed
       if (source === 'finder' && tags.indexOf('named') === -1) {
-        score += 18; tags.push('named'); parts.push(['found in source', 18]);
+        score += 10; tags.push('named'); parts.push(['found in source', 10]);
       }
+      try {
+        var ev = findEvidence[keyOf(absolute)];
+        if (ev && ev.findName === state.findName && ev.bonus) {
+          score += ev.bonus;
+          for (var ei = 0; ei < ev.parts.length; ei++) parts.push(ev.parts[ei]);
+          if (tags.indexOf('named') === -1) tags.push('named');
+          for (var ep = 0; ep < ev.parts.length; ep++) {
+            if (ev.parts[ep][0] === 'title match' && tags.indexOf('title-ok') === -1) tags.push('title-ok');
+            if (ev.parts[ep][0] === 'title mismatch' && tags.indexOf('title-miss') === -1) tags.push('title-miss');
+          }
+        }
+      } catch (e) { }
     }
 
     if (url.pathname === '/' || url.pathname === '') { score -= 70; tags.push('root'); parts.push(['site root', -70]); }
@@ -412,8 +422,7 @@
       tech: verdict.tech,
       ext: verdict.ext,
       hits: 1,
-      bytes: 0,
-      born: Date.now()
+      bytes: 0
     });
     stats.kept = items.length;
     items.sort(function (a, b) { return b.score - a.score || b.id - a.id; });
@@ -429,21 +438,13 @@
   function probeSize(item) {
     if (!/^https?:/.test(item.url) || item.probing) return;
     item.probing = true;
-    var t0 = Date.now();
     fetch(item.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
       item.bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
       item.mime = r.headers.get('content-type') || '';
       item.ok = r.ok;
-      item.ms = Date.now() - t0;
       item.probing = false;
       dirty = true; scheduleRender();
-    }).catch(function () {
-      item.probing = false;
-      item.ms = Date.now() - t0;
-      item.mime = 'unreachable';
-      item.ok = false;
-      dirty = true; scheduleRender();
-    });
+    }).catch(function () { item.probing = false; item.mime = 'unreachable'; });
   }
 
   function scanDocument(doc, base) {
@@ -639,12 +640,6 @@
 
   function scanMeta() {
     try {
-      var man = document.querySelector('link[rel="manifest"]');
-      if (man && man.href) addCandidate(man.href, 'pwa');
-      var icons = document.querySelectorAll('link[rel~="apple-touch-icon"], link[rel~="icon"][sizes]');
-      for (var ic = 0; ic < icons.length && ic < 4; ic++) addCandidate(icons[ic].getAttribute('href'), 'pwa');
-    } catch (e) { }
-    try {
       var nodes = document.querySelectorAll('meta[content], base[href]');
       for (var i = 0; i < nodes.length; i++) {
         var v = nodes[i].getAttribute('content') || nodes[i].getAttribute('href') || '';
@@ -759,22 +754,6 @@
     } catch (e) { /* frozen */ }
 
     try {
-      var WS = window.WebSocket;
-      if (typeof WS === 'function') {
-        window.WebSocket = function (url, protocols) {
-          try { if (url) addCandidate(String(url), 'ws'); } catch (e) { }
-          return protocols === undefined ? new WS(url) : new WS(url, protocols);
-        };
-        window.WebSocket.prototype = WS.prototype;
-        window.WebSocket.CONNECTING = WS.CONNECTING;
-        window.WebSocket.OPEN = WS.OPEN;
-        window.WebSocket.CLOSING = WS.CLOSING;
-        window.WebSocket.CLOSED = WS.CLOSED;
-        restoreHooks.push(function () { window.WebSocket = WS; });
-      }
-    } catch (e) { /* frozen */ }
-
-    try {
       var po = new PerformanceObserver(function (list) {
         var entries = list.getEntries();
         for (var i = 0; i < entries.length; i++) {
@@ -840,9 +819,13 @@
   var state = {
     min: false, query: '', filter: 'all', showAll: false, favOnly: false,
     expanded: 0, theater: null,
-    findOpen: false, findInput: '', findName: '', findVariants: [], findMsg: null,
-    trace: null
+    findOpen: false, findInput: '', findName: '', findVariants: [], findWords: [],
+    findMsg: null, findDeep: true, findBusy: false,
+    findProgress: { phase: '', done: 0, total: 0 }
   };
+  var findEvidence = {};
+  var findFetchCache = {};
+  try { state.findDeep = localStorage.getItem('gex:finddeep') !== '0'; } catch (e) { state.findDeep = true; }
   var POS_KEY = 'gex:pos';
 
   var CSS = [
@@ -982,23 +965,19 @@
     '.gex-findbar input::placeholder{color:rgba(142,142,147,.6);}',
     '.gex-findok{font-size:10.5px;color:#4cd964;font-weight:600;white-space:nowrap;flex:none;}',
     '.gex-findmiss{font-size:10.5px;color:#ffb340;white-space:nowrap;flex:none;}',
+    '.gex-findprog{font-size:10.5px;color:#7cb8ff;font-weight:600;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:6px;}',
+    '.gex-findprog .spin{width:10px;height:10px;border-radius:50%;border:2px solid rgba(124,184,255,.3);border-top-color:#7cb8ff;animation:gexSpin .7s linear infinite;display:inline-block;}',
+    '@keyframes gexSpin{to{transform:rotate(360deg)}}',
+    '.gex-mini.on{background:rgba(48,209,88,.16);border-color:rgba(48,209,88,.4);color:#7ee39a;}',
+    '.gex-titleok{background:rgba(10,132,255,.16)!important;color:#8fc7ff!important;border-color:rgba(10,132,255,.35)!important;}',
+    '.gex-ev{margin:7px 0 2px;border:1px solid rgba(48,209,88,.22);border-radius:10px;overflow:hidden;}',
+    '.gex-ev .t{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7ee39a;background:rgba(48,209,88,.09);padding:5px 9px;}',
+    '.gex-ev .e{display:flex;gap:8px;align-items:baseline;padding:4px 9px;border-top:1px solid rgba(255,255,255,.05);font-size:10px;}',
+    '.gex-ev .e span{flex:none;color:#7cb8ff;font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+    '.gex-ev .e code{font-family:ui-monospace,Menlo,monospace;color:#a9a9b0;word-break:break-all;font-size:9.5px;}',
     '.gex-log{margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:9px;}',
     '.gex-log .t{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6a6a70;margin-bottom:4px;}',
     '.gex-log .l{font:10px/1.75 ui-monospace,Menlo,monospace;color:#7c7c81;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-    '@keyframes gexFresh{0%{box-shadow:0 0 0 0 rgba(10,132,255,.5)}100%{box-shadow:0 0 0 12px rgba(10,132,255,0)}}',
-    '.gex-card.fresh{animation:gexFresh 1s ease-out 2;}',
-    '.gex-trace{margin-top:10px;border-top:1px solid rgba(255,255,255,.07);padding-top:10px;}',
-    '.gex-trace-h{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#e8e8ed;margin-bottom:7px;}',
-    '.gex-trace-h svg{color:#84c1ff}',
-    '.gex-trace-sub{font-size:10.5px;color:#7c7c81;padding:2px;}',
-    '.gex-tf{display:flex;align-items:center;gap:8px;padding:3.5px 2px;border-top:1px solid rgba(255,255,255,.045);font-size:10.5px;}',
-    '.gex-tf:first-of-type{border-top:0}',
-    '.gex-tf-role{flex:none;width:52px;text-align:center;font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:99px;padding:2px 0;}',
-    '.gex-tf-role.r-core{background:rgba(10,132,255,.15);color:#84c1ff;border:1px solid rgba(10,132,255,.25)}',
-    '.gex-tf-role.r-config{background:rgba(191,90,242,.14);color:#d7a8ff;border:1px solid rgba(191,90,242,.28)}',
-    '.gex-tf-role.r-support{background:rgba(255,255,255,.06);color:#a9a9b0;border:1px solid rgba(255,255,255,.08)}',
-    '.gex-tf-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9c9d4;}',
-    '.gex-tf-size{flex:none;font-family:ui-monospace,Menlo,monospace;color:#7c7c81;font-size:10px;}',
     '.gex-lights{display:flex;gap:7px;align-items:center;flex:none;}',
     '.gex-light{width:11px;height:11px;border-radius:50%;position:relative;display:grid;place-items:center;box-shadow:inset 0 0 2px rgba(0,0,0,.25);}',
     '.gex-light.r{background:#ff5f57;}.gex-light.y{background:#febc2e;}.gex-light.g{background:#28c840;}',
@@ -1061,16 +1040,14 @@
     play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
     back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
     target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>',
-    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
-    layers: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3.5 12.5L12 17l8.5-4.5"/><path d="M3.5 16.5L12 21l8.5-4.5"/></svg>'
+    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>'
   };
 
   var SOURCE_LABEL = {
     'live-iframe': 'runtime', 'live-fetch': 'runtime', 'live-xhr': 'runtime',
     'iframe': 'iframe', 'embed': 'embed', 'media': 'media', 'link': 'link',
     'script': 'script', 'json': 'json', 'attr': 'attr', 'storage': 'storage',
-    'network': 'network', 'global': 'global', 'dom': 'dom', 'srcdoc': 'srcdoc',
-    'deep': 'deep', 'finder': 'finder', 'ws': 'socket', 'pwa': 'pwa'
+    'network': 'network', 'global': 'global', 'dom': 'dom', 'srcdoc': 'srcdoc'
   };
 
   var SWITCHES = [
@@ -1118,6 +1095,11 @@
   }
 
   function namedMatch(it) {
+    if (!state.findName) return false;
+    try {
+      var ev = findEvidence[keyOf(it.url)];
+      if (ev && ev.findName === state.findName && ev.hits && ev.hits.length) return true;
+    } catch (e) { }
     if (it.source === 'finder') return true;
     if (!state.findVariants || !state.findVariants.length) return false;
     var u = it.url.toLowerCase();
@@ -1153,101 +1135,315 @@
     return out;
   }
 
+  var FIND_STOP = { the: 1, a: 1, an: 1, of: 1, and: 1, game: 1, games: 1, play: 1, online: 1, free: 1, hd: 1, '3d': 1, '2d': 1, io: 1, unblocked: 1, deluxe: 1, remix: 1, edition: 1 };
+
   function nameVariants(name) {
-    var n = String(name || '').toLowerCase().trim();
+    var n = String(name || '').toLowerCase().trim().replace(/\s+/g, ' ');
     if (!n) return [];
     var out = [n];
     var slug = n.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    if (slug.length > 3) out.push(slug);
+    if (slug.length >= 3) out.push(slug);
     var und = slug.replace(/-/g, '_');
-    if (und !== slug && und.length > 3) out.push(und);
-    var words = n.split(/\s+/).filter(Boolean);
+    if (und !== slug && und.length >= 3) out.push(und);
+    var nospace = slug.replace(/-/g, '');
+    if (nospace.length >= 4 && out.indexOf(nospace) === -1) out.push(nospace);
+    var camel = n.split(/[^a-z0-9]+/).filter(Boolean);
+    if (camel.length > 1) {
+      var cc = camel[0] + camel.slice(1).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join('');
+      out.push(cc.toLowerCase());
+    }
+    try {
+      var enc = encodeURIComponent(n);
+      if (enc !== n && enc.length >= 3) out.push(enc.toLowerCase());
+      var plus = n.replace(/\s+/g, '+');
+      if (plus !== n) out.push(plus);
+    } catch (e) { }
+    var words = n.split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4 && !FIND_STOP[w]; });
+    for (var i = 0; i < words.length; i++) {
+      if (out.indexOf(words[i]) === -1) out.push(words[i]);
+    }
     if (words.length > 1) {
       var longest = words.slice().sort(function (a, b) { return b.length - a.length; })[0];
-      if (longest.length >= 6 && out.indexOf(longest) === -1) out.push(longest);
+      if (longest && longest.length >= 6 && out.indexOf(longest) === -1) out.push(longest);
     }
-    return out.filter(function (v, i, a) { return v.length >= 3 && a.indexOf(v) === i; });
+    out = out.filter(function (v, i, a) { return v && v.length >= 3 && a.indexOf(v) === i; });
+    out.sort(function (a, b) { return b.length - a.length; });
+    return out.slice(0, 12);
   }
 
-  // what the page itself claims the game is called
+  function nameWords(name) {
+    return String(name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3 && !FIND_STOP[w]; });
+  }
+
+  function cleanTitlePick(pick) {
+    pick = String(pick || '')
+      .replace(/^(play|watch|run|download)\s+/i, '')
+      .replace(/\s+(game|games|portal|arcade|web|online|free|unblocked|walkthrough|guide)\s*$/i, '')
+      .replace(/\s*[\(\[].*?[\)\]]\s*$/g, '')
+      .trim();
+    if (pick && pick.length > 2 && pick.length <= 80) return pick;
+    return null;
+  }
+
   function deriveName() {
+    var cands = [];
     try {
       var t = (document.title || '').trim();
       if (t) {
         var segs = t.split(/\s*[|·•—–]\s+|\s+-\s+|\s+–\s+/).filter(Boolean);
-        var pick = segs[0] || t;
-        // "PixelPort — Play Neon Drift": the site brand is the host, the game is the other half
-        if (CORE && CORE.length > 2 && segs.length > 1) {
-          var noBrand = segs.filter(function (s) { return s.toLowerCase().indexOf(CORE.toLowerCase()) === -1; });
-          if (noBrand.length) pick = noBrand[0];
+        var list = segs.length ? segs : [t];
+        if (CORE && CORE.length > 2 && list.length > 1) {
+          var noBrand = list.filter(function (s) { return s.toLowerCase().indexOf(CORE.toLowerCase()) === -1; });
+          if (noBrand.length) list = noBrand;
         }
-        pick = pick
-          .replace(/^(play|watch|run|download)\s+/i, '')
-          .replace(/\s+(game|games|portal|arcade|web|online|free|unblocked)\s*$/i, '')
-          .trim();
-        if (pick && pick.length > 2) return pick.slice(0, 80);
+        for (var i = 0; i < list.length; i++) cands.push(list[i]);
       }
     } catch (e) { }
     try {
-      var h = document.querySelector('h1, h2');
-      if (h && h.textContent && h.textContent.trim().length > 2) return h.textContent.trim().slice(0, 80);
+      var metas = document.querySelectorAll('meta[property="og:title"], meta[name="twitter:title"], meta[name="title"], meta[itemprop="name"], meta[name="game"], meta[property="og:site_name"]');
+      for (var m = 0; m < metas.length; m++) {
+        var c = metas[m].getAttribute('content') || '';
+        if (c.trim()) cands.push(c.trim());
+      }
     } catch (e) { }
     try {
-      var og = document.querySelector('meta[property="og:title"]');
-      if (og && og.getAttribute('content')) return og.getAttribute('content').trim().slice(0, 80);
+      var ld = document.querySelectorAll('script[type="application/ld+json"]');
+      for (var l = 0; l < ld.length; l++) {
+        try {
+          var o = JSON.parse(ld[l].textContent || '{}');
+          var arr = Array.isArray(o) ? o : [o];
+          for (var k = 0; k < arr.length; k++) {
+            if (arr[k] && (arr[k].name || (arr[k].mainEntity && arr[k].mainEntity.name))) {
+              cands.push(String(arr[k].name || arr[k].mainEntity.name));
+            }
+          }
+        } catch (e2) { }
+      }
     } catch (e) { }
+    try {
+      var h = document.querySelector('h1');
+      if (h && h.textContent.trim()) cands.push(h.textContent.trim());
+      var h2 = document.querySelector('[class*="game-title" i], [class*="game-name" i], [id*="game-title" i], h2');
+      if (h2 && h2.textContent.trim()) cands.push(h2.textContent.trim());
+    } catch (e) { }
+    for (var ci = 0; ci < cands.length; ci++) {
+      var cleaned = cleanTitlePick(cands[ci]);
+      if (cleaned) return cleaned.slice(0, 80);
+    }
     try {
       var segs = location.pathname.split('/').filter(Boolean);
-      for (var i = segs.length - 1; i >= 0; i--) {
-        var s = segs[i].replace(/\.(html?|php|asp|aspx|jsp)$/i, '');
+      for (var i2 = segs.length - 1; i2 >= 0; i2--) {
+        var s = segs[i2].replace(/\.(html?|php|asp|aspx|jsp)$/i, '');
         if (!/^(game|games|play|embed|iframe|player|index|view|load|show|page|roms?|v\d+)$/i.test(s) && s.length > 2) {
-          return s.replace(/[-_+]/g, ' ').trim();
+          var slugPick = cleanTitlePick(s.replace(/[-_+]/g, ' ').trim());
+          if (slugPick) return slugPick;
         }
       }
     } catch (e) { }
     return CURRENT_HOST || '';
   }
 
-  // hunt the page's own sources for URLs that belong to a game name
-  function runFinder(name) {
-    var nm = String(name || '').trim();
-    if (!nm) { toast('Type a game name first'); return; }
-    state.findName = nm;
-    state.findVariants = nameVariants(nm);
-    var v = state.findVariants;
-    var before = items.length;
-
-    function grab(u) {
-      try { if (u && !/^(data:|javascript:|mailto:)/i.test(u)) addCandidate(u, 'finder'); } catch (e) { }
+  function findHitPositions(lower, variants) {
+    var hits = [];
+    for (var i = 0; i < variants.length; i++) {
+      var v = variants[i];
+      if (!v || v.length < 3) continue;
+      var at = 0;
+      var guard = 0;
+      while (guard++ < 40) {
+        var idx = lower.indexOf(v, at);
+        if (idx === -1) break;
+        hits.push({ pos: idx, variant: v, len: v.length });
+        at = idx + v.length;
+      }
     }
+    hits.sort(function (a, b) { return a.pos - b.pos; });
+    return hits.slice(0, 60);
+  }
 
+  function extractUrlsFromText(text) {
+    var out = [];
+    if (!text) return out;
+    var abs = String(text).match(/https?:\/\/[^\s"'`<>()\\]+/gi) || [];
+    for (var i = 0; i < abs.length; i++) {
+      out.push(abs[i].replace(/[.,;)\]}'"]+$/, ''));
+    }
+    var rel = String(text).match(/["'`(\s](\/[A-Za-z0-9_.\-\/]{3,180}\.(?:html?|swf|wasm|unityweb|data|pck|zip|json|bundle|assets|br|gz|bin))(?:[?#][^"'`\s)]*)?/gi) || [];
+    for (var j = 0; j < rel.length; j++) {
+      out.push(rel[j].replace(/^["'`(\s]/, ''));
+    }
+    var proto = String(text).match(/["'`](\/\/[A-Za-z0-9_.\-\/]{4,180}\.(?:html?|swf|wasm|unityweb|data|pck|zip|js|json))/gi) || [];
+    for (var k = 0; k < proto.length; k++) {
+      out.push('https:' + proto[k].replace(/^["'`]/, ''));
+    }
+    return out;
+  }
+
+  function joinSplitStrings(js) {
+    try {
+      return String(js).replace(/(["'])(https?:\/\/[^"']{4,120}|(?:\/[\w.\-\/]{2,120}))\1\s*\+\s*(["'])([^"']{1,180})\3/g,
+        function (_m, _q1, a, _q2, b) { return '"' + a + b + '"'; });
+    } catch (e) { return js; }
+  }
+
+  function b64UrlsFromText(text) {
+    var out = [];
+    if (!text || text.length > 900000) return out;
+    var cands = String(text).match(/["'`]([A-Za-z0-9+\/=_-]{40,}={0,2})["'`]/g) || [];
+    for (var i = 0; i < cands.length && i < 40; i++) {
+      var raw = cands[i].replace(/^["'`]|["'`]$/g, '');
+      if (raw.length < 40 || raw.length > 4000) continue;
+      try {
+        var norm = raw.replace(/-/g, '+').replace(/_/g, '/');
+        while (norm.length % 4) norm += '=';
+        var dec = '';
+        try { dec = atob(norm); } catch (e2) { continue; }
+        if (/https?:\/\/[\w.\-\/]{4,200}\.(?:html?|swf|wasm|unityweb|data|pck|zip|json)/i.test(dec)) {
+          var m = dec.match(/https?:\/\/[^\s"'<>\\]+/gi) || [];
+          for (var j = 0; j < m.length; j++) out.push(m[j]);
+        } else if (/^\/[\w.\-\/]{3,160}\.(?:html?|swf|wasm|unityweb|data|pck|zip)/i.test(dec)) {
+          out.push(dec.trim());
+        }
+      } catch (e) { }
+    }
+    return out;
+  }
+
+  function snippetAround(text, pos, len) {
+    try {
+      var s = Math.max(0, pos - 70);
+      var e = Math.min(text.length, pos + (len || 8) + 90);
+      var sn = text.slice(s, e).replace(/\s+/g, ' ').trim();
+      if (s > 0) sn = '…' + sn;
+      if (e < text.length) sn = sn + '…';
+      return sn.slice(0, 220);
+    } catch (err) { return ''; }
+  }
+
+  function evidenceKey(u) { return keyOf(u); }
+
+  function addNameHit(url, where, snippet, variant, bonus, label) {
+    try {
+      var k = evidenceKey(url);
+      var ev = findEvidence[k];
+      if (!ev || ev.findName !== state.findName) {
+        ev = findEvidence[k] = { findName: state.findName, hits: [], bonus: 0, parts: [], tags: [] };
+      }
+      if (ev.hits.length >= 8) return;
+      for (var i = 0; i < ev.hits.length; i++) {
+        if (ev.hits[i].where === where && ev.hits[i].snippet === snippet) return;
+      }
+      ev.hits.push({ where: where, snippet: snippet || '', variant: variant || '' });
+      var b = bonus || 0;
+      if (b) {
+        ev.bonus += b;
+        ev.parts.push([label || where, b]);
+      }
+      if (ev.hits.length > 1 && ev.bonus < 60) {
+        ev.bonus += 2;
+        ev.parts.push(['+ evidence', 2]);
+      }
+    } catch (e) { }
+  }
+
+  function urlsNearHits(text, hits, radius) {
+    var out = [];
+    var seenU = {};
+    for (var i = 0; i < hits.length; i++) {
+      var h = hits[i];
+      var s = Math.max(0, h.pos - radius);
+      var e = Math.min(text.length, h.pos + h.len + radius);
+      var win = text.slice(s, e);
+      var urls = extractUrlsFromText(win);
+      for (var j = 0; j < urls.length; j++) {
+        var u = urls[j];
+        if (!u || seenU[u]) continue;
+        var upos = win.indexOf(u);
+        var dist = upos === -1 ? radius : Math.abs((s + upos) - h.pos);
+        seenU[u] = 1;
+        out.push({ url: u, dist: dist, hit: h, snippet: snippetAround(text, h.pos, h.len) });
+      }
+    }
+    return out;
+  }
+
+  function wordsOverlap(a, b) {
+    var aw = nameWords(a);
+    var bl = {};
+    var bw = String(b || '').toLowerCase().split(/[^a-z0-9]+/);
+    for (var i = 0; i < bw.length; i++) bl[bw[i]] = 1;
+    var hit = 0;
+    for (var j = 0; j < aw.length; j++) if (bl[aw[j]]) hit++;
+    return { hit: hit, total: aw.length };
+  }
+
+  function fetchTextSmart(u, timeoutMs) {
+    var url = String(u || '');
+    if (findFetchCache[url]) return findFetchCache[url];
+    var same = false;
+    try { same = new URL(url, document.baseURI).origin === location.origin; } catch (e) { }
+    var p;
+    if (same) {
+      p = fetch(url, { redirect: 'follow', credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.text();
+      });
+    } else {
+      p = fetchThroughProxy(url);
+    }
+    p = Promise.race([
+      p,
+      new Promise(function (_r, rej) { setTimeout(function () { rej(new Error('timeout')); }, timeoutMs || 9000); })
+    ]).then(function (body) {
+      if (typeof body === 'string' && body.length > 2500000) return body.slice(0, 2500000);
+      return body;
+    });
+    findFetchCache[url] = p;
+    p.catch(function () { delete findFetchCache[url]; });
+    return p;
+  }
+
+  function grabFinder(u, where, snippet, variant, bonus, label, base) {
+    try {
+      if (!u || /^(data:|javascript:|mailto:|tel:|#)/i.test(String(u).trim())) return null;
+      var unwrapped = unwrap(String(u));
+      var abs = resolveUrl(unwrapped, base || document.baseURI);
+      if (!abs) return null;
+      addCandidate(abs, 'finder');
+      addNameHit(abs, where || 'source', snippet || '', variant || '', bonus || 0, label || where || 'source');
+      return abs;
+    } catch (e) { return null; }
+  }
+
+  function proximityBonus(dist) {
+    if (dist < 250) return 25;
+    if (dist < 800) return 18;
+    if (dist < 2000) return 12;
+    return 8;
+  }
+
+  function runFinderLocal() {
+    var v = state.findVariants;
+    if (!v.length) return 0;
+    var before = items.length;
     try {
       var scripts = document.querySelectorAll('script:not([src])');
       for (var i = 0; i < scripts.length && i < 500; i++) {
-        var text = scripts[i].textContent || '';
-        if (!text || text.length > 900000) continue;
+        var rawText = scripts[i].textContent || '';
+        if (!rawText || rawText.length > 1200000) continue;
+        var text = joinSplitStrings(rawText);
         var tl = text.toLowerCase();
-        var anyHit = false;
-        for (var x = 0; x < v.length; x++) if (tl.indexOf(v[x]) > -1) { anyHit = true; break; }
-        if (!anyHit) continue;
-
-        // line-level: a line that mentions the name → URLs on that line and the next
-        var lines = text.split(/\r?\n/);
-        for (var L = 0; L < lines.length && L < 4000; L++) {
-          var ll = lines[L].toLowerCase();
-          var onLine = false;
-          for (var y = 0; y < v.length; y++) if (ll.indexOf(v[y]) > -1) { onLine = true; break; }
-          if (!onLine) continue;
-          var urls = lines[L].match(/https?:\/\/[^\s"'`<>()\\]+|["'](\/[A-Za-z0-9_.\-/]{3,150}\.(?:html?|swf|wasm|unityweb|data|pck|zip|json))["']/gi) || [];
-          for (var q = 0; q < urls.length; q++) grab(urls[q].replace(/^["'(]|[")'`]$/g, '').replace(/[.,;)\]]+$/, ''));
-          if (L + 1 < lines.length) {
-            var nxt = (lines[L + 1] || '').match(/https?:\/\/[^\s"'`<>()\\]+/gi) || [];
-            for (var q2 = 0; q2 < nxt.length; q2++) grab(nxt[q2]);
-          }
+        var hits = findHitPositions(tl, v);
+        if (!hits.length) continue;
+        var near = urlsNearHits(text, hits, 2000);
+        for (var n = 0; n < near.length && n < 30; n++) {
+          grabFinder(near[n].url, 'inline js', near[n].snippet, near[n].hit.variant, proximityBonus(near[n].dist), 'name nearby');
         }
-
-        // object-level: JSON whose content mentions the name → every URL inside it
-        var trimmed = text.trim();
+        var b64u = b64UrlsFromText(rawText);
+        for (var b = 0; b < b64u.length; b++) {
+          grabFinder(b64u[b], 'inline js b64', snippetAround(text, hits[0].pos, hits[0].len), hits[0].variant, 14, 'encoded url');
+        }
+        var trimmed = rawText.trim();
         if (/^\s*[\[{]/.test(trimmed)) {
           try {
             var obj = JSON.parse(trimmed);
@@ -1257,206 +1453,411 @@
             if (inObj) {
               var hs = [];
               walkJson(obj, hs, 0);
-              for (var h = 0; h < hs.length; h++) grab(hs[h]);
+              for (var h = 0; h < hs.length; h++) {
+                grabFinder(hs[h], 'json config', 'object mentions name', v[0], 18, 'config match');
+              }
             }
           } catch (e) { }
         }
-      }
-    } catch (e) { }
-
-    try {
-      var els = document.querySelectorAll('[data-src],[data-url],[data-game],[data-href],[data-embed],[data-path],[data-config],[data-rom],[data-file]');
-      for (var d = 0; d < els.length && d < 400; d++) {
-        var el = els[d];
-        var blob = '';
-        try { blob = (el.tagName + ' ' + (el.id || '') + ' ' + (el.className || '')).toLowerCase(); } catch (e2) { }
-        var mDom = false;
-        for (var w = 0; w < v.length; w++) if (blob.indexOf(v[w]) > -1) { mDom = true; break; }
-        if (!mDom) continue;
-        var vv = el.getAttribute('data-src') || el.getAttribute('data-url') || el.getAttribute('data-game') ||
-          el.getAttribute('data-href') || el.getAttribute('data-embed') || el.getAttribute('data-path') ||
-          el.getAttribute('data-rom') || el.getAttribute('data-file');
-        if (vv) grab(vv);
-      }
-    } catch (e) { }
-
-    state.findMsg = { ok: namedCount() > 0, n: namedCount() };
-    log('find "' + nm + '" → ' + state.findMsg.n + ' named · ' + (items.length - before) + ' new from sources');
-    reevaluate();
-    render();
-    toast(state.findMsg.ok
-      ? state.findMsg.n + ' match' + (state.findMsg.n === 1 ? '' : 'es') + ' for “' + nm + '”'
-      : 'No source matched “' + nm + '” — try the exact slug');
-  }
-
-  /* ---------------- trace: the full package a build needs ---------------- */
-  var traceSeq = 0;
-
-  function traceBuild(url) {
-    var seq = ++traceSeq;
-    state.trace = { url: url, status: 'loading', files: [], total: 0 };
-    render();
-
-    function push(files, raw, role) {
-      var abs = resolveUrl(raw, url);
-      if (!abs || /^data:/i.test(abs)) return;
-      abs = abs.split('#')[0];
-      var k = keyOf(abs);
-      for (var i = 0; i < files.length; i++) if (files[i].k === k) return;
-      files.push({
-        k: k, url: abs, role: role,
-        ext: (abs.match(/\.[a-z0-9]{1,9}$/i) || [''])[0].toLowerCase(),
-        bytes: 0, ms: 0
-      });
-    }
-
-    fetchThroughProxy(url).then(function (body) {
-      if (state.trace && state.trace.url !== url) return; // superseded
-      if (!body) throw new Error('empty');
-      var files = [];
-
-      // Unity build config (Build/game.json)
-      var trimmed = body.trim();
-      if (/^\s*\{/.test(trimmed) && /dataUrl|frameworkUrl|codeUrl/.test(trimmed)) {
-        try {
-          var cfg = JSON.parse(trimmed);
-          ['dataUrl', 'frameworkUrl', 'codeUrl', 'wasmBinaryUrl', 'loaderUrl', 'serverUrl', 'symbolsUrl']
-            .forEach(function (f) { if (typeof cfg[f] === 'string') push(files, cfg[f], 'core'); });
-        } catch (e) { }
-      }
-
-      var m;
-      // Unity loader calls inside html/js
-      var reU = /UnityLoader\.(?:instantiate|Build)\s*\([^,]+,\s*["']([^"']+)["']/g;
-      while ((m = reU.exec(body))) push(files, m[1], 'config');
-      var reC = /createUnityInstance\s*\([^,]+,\s*\{([^}]{0,600})\}/g;
-      while ((m = reC.exec(body))) {
-        var kv = /(\w+Url|dataUrl|frameworkUrl|codeUrl)\s*:\s*["']([^"']+)["']/g, mm;
-        while ((mm = kv.exec(m[1]))) push(files, mm[2], 'core');
-      }
-      // Godot
-      var reG = /(?:startGame|start|init|preload|Engine\()\s*\(?[^"']*?["']([^"']+?\.(?:pck|zip|wasm))["']/gi;
-      while ((m = reG.exec(body))) push(files, m[1], 'core');
-      // Construct / PlayCanvas
-      var reP = /["'](project\.json|files\.json|__game\.json|config\.json)["']/gi;
-      while ((m = reP.exec(body))) push(files, m[1], 'config');
-
-      // tag-swept game assets
-      var tagRe = /(?:src|href|data)\s*=\s*["']([^"']{3,220})["']/gi;
-      while ((m = tagRe.exec(body))) {
-        if (/\.(?:wasm|data|pck|unityweb|framework\.js|loader\.js|bundle|assets|swf|json|html?|br|gz)(?:[?#]|$)/i.test(m[1])) {
-          push(files, m[1], /\.(?:wasm|data|pck|unityweb|swf|br|gz)$/i.test(m[1]) ? 'core' : 'support');
+        var cfgs = text.match(/(?:window\.)?[A-Za-z_$][\w$]{2,40}\s*=\s*\{[\s\S]{0,5000}?\}\s*;/g) || [];
+        for (var c = 0; c < cfgs.length && c < 40; c++) {
+          var cl = cfgs[c].toLowerCase();
+          var hasName = false;
+          for (var cv = 0; cv < v.length; cv++) if (cl.indexOf(v[cv]) > -1) { hasName = true; break; }
+          if (!hasName) continue;
+          var cu = extractUrlsFromText(cfgs[c]);
+          for (var cuI = 0; cuI < cu.length && cuI < 10; cuI++) {
+            grabFinder(cu[cuI], 'js config', snippetAround(cfgs[c], 0, 8), v[0], 18, 'config match');
+          }
         }
       }
-      // absolute deep links
-      var absRe = /https?:\/\/[^\s"'`<>()\\]+\.(?:wasm|data|pck|unityweb|framework\.js|swf|zip|br|gz)(?:[?#][^\s"'<>]*)?/gi;
-      while ((m = absRe.exec(body))) push(files, m[0], 'core');
+    } catch (e) { }
+    try {
+      var all = document.querySelectorAll('*');
+      var cap = Math.min(all.length, 6000);
+      var URL_ATTRS = ['src', 'href', 'data-src', 'data-url', 'data-game', 'data-href', 'data-embed', 'data-path', 'data-config', 'data-rom', 'data-file', 'data-iframe', 'data-frame', 'data-link', 'content', 'value', 'action', 'poster'];
+      for (var d = 0; d < cap; d++) {
+        var el = all[d];
+        var ident = '';
+        try {
+          ident = ((el.tagName || '') + ' ' + (el.id || '') + ' ' + (el.className || '') + ' ' +
+            (el.getAttribute && (el.getAttribute('title') || '') + ' ' + (el.getAttribute('alt') || '') + ' ' +
+            (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('name') || '') + ' ' +
+            (el.getAttribute('data-game') || '') + ' ' + (el.getAttribute('data-title') || ''))).toLowerCase();
+        } catch (e2) { continue; }
+        var hitV = null;
+        for (var w = 0; w < v.length; w++) if (ident.indexOf(v[w]) > -1) { hitV = v[w]; break; }
+        var anchorHit = false;
+        var anchorText = '';
+        try {
+          var tag = (el.tagName || '').toUpperCase();
+          if ((tag === 'A' || tag === 'BUTTON') && el.textContent) {
+            anchorText = el.textContent.slice(0, 200).toLowerCase();
+            for (var aw = 0; aw < v.length; aw++) if (anchorText.indexOf(v[aw]) > -1) { anchorHit = true; hitV = v[aw]; break; }
+          }
+        } catch (e3) { }
+        if (!hitV && !anchorHit) continue;
+        for (var a = 0; a < URL_ATTRS.length; a++) {
+          var av = null;
+          try { av = el.getAttribute && el.getAttribute(URL_ATTRS[a]); } catch (e4) { }
+          if (av && av.length > 3 && av.length < 2000 && !/^(#|javascript:|mailto:)/i.test(av.trim())) {
+            grabFinder(av, anchorHit ? 'link text' : 'dom tag', (anchorHit ? anchorText.slice(0, 120) : ident.slice(0, 120)), hitV || v[0], anchorHit ? 20 : 16, anchorHit ? 'link text' : 'dom match');
+          }
+        }
+        if (hitV && !anchorHit) {
+          try {
+            var frames = el.querySelectorAll ? el.querySelectorAll('iframe[src], embed[src], object[data], a[href]') : [];
+            for (var f = 0; f < frames.length && f < 3; f++) {
+              var fv = frames[f].getAttribute('src') || frames[f].getAttribute('data') || frames[f].getAttribute('href');
+              if (fv) grabFinder(fv, 'named container', ident.slice(0, 120), hitV, 16, 'container match');
+            }
+          } catch (e5) { }
+        }
+      }
+    } catch (e) { }
+    try {
+      var stores = [['local', null], ['session', null]];
+      try { stores[0][1] = window.localStorage; } catch (e) { }
+      try { stores[1][1] = window.sessionStorage; } catch (e) { }
+      for (var s = 0; s < stores.length; s++) {
+        var box = stores[s][1];
+        if (!box) continue;
+        for (var k = 0; k < box.length && k < 200; k++) {
+          var key = null;
+          try { key = box.key(k); } catch (e2) { continue; }
+          var val = '';
+          try { val = String(box.getItem(key) || ''); } catch (e3) { continue; }
+          if (!val || val.length > 30000) continue;
+          var combo = String(key + ' ' + val).toLowerCase();
+          var sh = findHitPositions(combo, v);
+          if (!sh.length) continue;
+          var su = urlsNearHits(combo, sh, 1500);
+          for (var suI = 0; suI < su.length && suI < 10; suI++) {
+            grabFinder(su[suI].url, stores[s][0] + 'Storage', su[suI].snippet, su[suI].hit.variant, 14, 'storage match');
+          }
+        }
+      }
+    } catch (e) { }
+    try {
+      var gkeys = {};
+      for (var g = 0; g < GLOBAL_KEYS.length; g++) gkeys[GLOBAL_KEYS[g]] = 1;
+      try {
+        var wkeys = Object.getOwnPropertyNames(window);
+        for (var wk = 0; wk < wkeys.length; wk++) {
+          if (/game|embed|iframe|rom|swf|wasm|build|arcade|loader|bundle|unity|godot|ejs|config|options|settings/i.test(wkeys[wk])) gkeys[wkeys[wk]] = 1;
+        }
+      } catch (e) { }
+      var gList = Object.keys(gkeys).slice(0, 300);
+      for (var gi = 0; gi < gList.length; gi++) {
+        var gv = null;
+        try { gv = window[gList[gi]]; } catch (e) { continue; }
+        if (!gv) continue;
+        if (typeof gv === 'string') {
+          if (gv.length > 20000) continue;
+          var gl = gv.toLowerCase();
+          var ghit = null;
+          for (var gh = 0; gh < v.length; gh++) if (gl.indexOf(v[gh]) > -1) { ghit = v[gh]; break; }
+          if (!ghit) continue;
+          var gu = extractUrlsFromText(gv);
+          for (var guI = 0; guI < gu.length && guI < 6; guI++) {
+            grabFinder(gu[guI], 'window.' + gList[gi], gv.slice(0, 160), ghit, 16, 'global match');
+          }
+        } else if (typeof gv === 'object') {
+          var js = '';
+          try { js = JSON.stringify(gv).slice(0, 120000); } catch (e) { continue; }
+          if (!js) continue;
+          var jl = js.toLowerCase();
+          var jhit = null;
+          for (var jh = 0; jh < v.length; jh++) if (jl.indexOf(v[jh]) > -1) { jhit = v[jh]; break; }
+          if (!jhit) continue;
+          var jo = [];
+          try { walkJson(gv, jo, 0); } catch (e) { continue; }
+          for (var joI = 0; joI < jo.length && joI < 12; joI++) {
+            grabFinder(jo[joI], 'window.' + gList[gi], 'object mentions name', jhit, 16, 'global match');
+          }
+        }
+      }
+    } catch (e) { }
+    try {
+      var metas = document.querySelectorAll('meta[content]');
+      var metaHit = false;
+      for (var mi = 0; mi < metas.length; mi++) {
+        var mc = (metas[mi].getAttribute('content') || '').toLowerCase();
+        for (var mv = 0; mv < v.length; mv++) if (mc.indexOf(v[mv]) > -1) { metaHit = true; break; }
+        if (metaHit) break;
+      }
+      if (metaHit) {
+        for (var mj = 0; mj < metas.length; mj++) {
+          var mv2 = metas[mj].getAttribute('content') || '';
+          if (/^https?:\/\//i.test(mv2) || /^\/\//.test(mv2)) {
+            grabFinder(mv2, 'meta tag', 'page meta mentions name', v[0], 14, 'meta match');
+          }
+        }
+      }
+      var lds = document.querySelectorAll('script[type="application/ld+json"]');
+      for (var li = 0; li < lds.length; li++) {
+        try {
+          var lo = JSON.parse(lds[li].textContent || '{}');
+          var ls = JSON.stringify(lo).toLowerCase();
+          var lhit = null;
+          for (var lh = 0; lh < v.length; lh++) if (ls.indexOf(v[lh]) > -1) { lhit = v[lh]; break; }
+          if (!lhit) continue;
+          var lhits = [];
+          walkJson(lo, lhits, 0);
+          for (var lhi = 0; lhi < lhits.length; lhi++) {
+            grabFinder(lhits[lhi], 'ld+json', 'structured data mentions name', lhit, 20, 'schema match');
+          }
+        } catch (e) { }
+      }
+    } catch (e) { }
+    try {
+      var outer = document.documentElement ? document.documentElement.outerHTML || '' : '';
+      if (outer && outer.length < 3000000) {
+        var cre = /<!--([\s\S]{0,2000}?)-->/g;
+        var cm;
+        var cguard = 0;
+        while ((cm = cre.exec(outer)) && cguard++ < 60) {
+          var ctext = (cm[1] || '').toLowerCase();
+          var chit = null;
+          for (var ch = 0; ch < v.length; ch++) if (ctext.indexOf(v[ch]) > -1) { chit = v[ch]; break; }
+          if (!chit) continue;
+          var ctx = outer.slice(Math.max(0, cm.index - 300), cm.index + 2200);
+          var cUrls = extractUrlsFromText(ctx);
+          for (var cu2 = 0; cu2 < cUrls.length && cu2 < 8; cu2++) {
+            grabFinder(cUrls[cu2], 'html comment', cm[1].slice(0, 160).replace(/\s+/g, ' '), chit, 12, 'comment match');
+          }
+        }
+      }
+    } catch (e) { }
+    try {
+      var frs = document.querySelectorAll('iframe');
+      for (var fi = 0; fi < frs.length && fi < 20; fi++) {
+        var fdoc = null;
+        try { fdoc = frs[fi].contentDocument; } catch (e) { continue; }
+        if (!fdoc || !fdoc.documentElement) continue;
+        try {
+          var fhtml = fdoc.documentElement.outerHTML || '';
+          if (!fhtml || fhtml.length > 800000) continue;
+          var fl = fhtml.toLowerCase();
+          var fhit = null;
+          for (var fh = 0; fh < v.length; fh++) if (fl.indexOf(v[fh]) > -1) { fhit = v[fh]; break; }
+          if (!fhit) continue;
+          var furls = extractUrlsFromText(fhtml.slice(0, 400000));
+          for (var fui = 0; fui < furls.length && fui < 10; fui++) {
+            grabFinder(furls[fui], 'iframe document', 'same-origin frame mentions name', fhit, 16, 'frame match');
+          }
+        } catch (e) { }
+      }
+    } catch (e) { }
+    for (var ii = 0; ii < items.length; ii++) {
+      try {
+        var itU = items[ii].url.toLowerCase();
+        for (var vv = 0; vv < v.length; vv++) {
+          if (v[vv].length > 3 && itU.indexOf(v[vv]) > -1) {
+            var pth = '';
+            try { pth = new URL(items[ii].url).pathname.slice(0, 90); } catch (e) { }
+            addNameHit(items[ii].url, 'url carries name', hostOf(items[ii].url) + pth, v[vv], 0, null);
+            break;
+          }
+        }
+      } catch (e) { }
+    }
+    return items.length - before;
+  }
 
-      if (seq !== traceSeq || (state.trace && state.trace.url !== url)) return;
-      state.trace = { url: url, status: 'done', files: files, total: files.length };
-      log('trace "' + hostOf(url) + '" → ' + files.length + ' files');
-      probeTraceFiles(files, url);
+  function runFinderDeep(token) {
+    var v = state.findVariants;
+    if (!v.length) return;
+    var scripts = [];
+    try {
+      var nodes = document.querySelectorAll('script[src]');
+      for (var i = 0; i < nodes.length && scripts.length < 15; i++) {
+        var src = nodes[i].getAttribute('src') || '';
+        if (!src) continue;
+        var abs = resolveUrl(unwrap(src));
+        if (!abs || !/^https?:/.test(abs)) continue;
+        if (NOISE_RE.test(abs.toLowerCase())) continue;
+        scripts.push(abs);
+      }
+      scripts.sort(function (a, b) {
+        var al = a.toLowerCase(), bl = b.toLowerCase();
+        var an = 0, bn = 0;
+        for (var k = 0; k < v.length; k++) { if (al.indexOf(v[k]) > -1) an = 1; if (bl.indexOf(v[k]) > -1) bn = 1; }
+        if (an !== bn) return bn - an;
+        var ah = 0, bh = 0;
+        try { ah = new URL(a).origin === location.origin ? 1 : 0; bh = new URL(b).origin === location.origin ? 1 : 0; } catch (e) { }
+        return bh - ah;
+      });
+      scripts = scripts.slice(0, 10);
+    } catch (e) { scripts = []; }
+    var pages = [];
+    try {
+      var sorted = items.slice().sort(function (a, b) { return b.score - a.score; });
+      var seenP = {};
+      for (var p = 0; p < sorted.length && pages.length < 12; p++) {
+        var u = sorted[p].url;
+        if (!/^https?:/.test(u) || seenP[u]) continue;
+        if (/\.(png|jpe?g|gif|webp|avif|svgz?|ico|css|woff2?|ttf|mp4|mp3|wav|map)(\?|#|$)/i.test(u)) continue;
+        seenP[u] = 1;
+        pages.push(u);
+      }
+      for (var q = 0; q < items.length && pages.length < 16; q++) {
+        var uu = items[q].url.toLowerCase();
+        var hasV = false;
+        for (var qv = 0; qv < v.length; qv++) if (uu.indexOf(v[qv]) > -1) { hasV = true; break; }
+        if (hasV && !seenP[items[q].url] && /^https?:/.test(items[q].url)) { seenP[items[q].url] = 1; pages.push(items[q].url); }
+      }
+    } catch (e) { pages = []; }
+    var jobs = [];
+    for (var s = 0; s < scripts.length; s++) jobs.push({ kind: 'js', url: scripts[s] });
+    for (var pg = 0; pg < pages.length; pg++) jobs.push({ kind: 'page', url: pages[pg] });
+    if (!jobs.length) { finishDeep(token, 0, 0); return; }
+    state.findProgress = { phase: 'deep', done: 0, total: jobs.length };
+    render();
+    var idx = 0, active = 0, jsHits = 0, verified = 0;
+    function pump() {
+      if (token !== state.findToken) return;
+      while (active < 3 && idx < jobs.length) {
+        var job = jobs[idx++];
+        active++;
+        runOne(job).then(function () {
+          active--;
+          state.findProgress.done++;
+          render();
+          pump();
+          if (state.findProgress.done >= jobs.length && active <= 0) finishDeep(token, jsHits, verified);
+        });
+      }
+    }
+    function runOne(job) {
+      return fetchTextSmart(job.url, 9000).then(function (body) {
+        if (token !== state.findToken) return;
+        if (!body || body.length < 80) return;
+        if (job.kind === 'js') {
+          var joined = joinSplitStrings(body);
+          var tl = joined.toLowerCase();
+          var hits = findHitPositions(tl, v);
+          if (!hits.length) return;
+          jsHits++;
+          var short = '';
+          try { short = hostOf(job.url) + new URL(job.url).pathname.slice(-40); } catch (e) { short = job.url.slice(-60); }
+          var near = urlsNearHits(joined, hits, 2000);
+          for (var n = 0; n < near.length && n < 20; n++) {
+            grabFinder(near[n].url, 'js file ' + short, near[n].snippet, near[n].hit.variant, 15, 'code match', job.url);
+          }
+          reevaluate();
+          render();
+        } else {
+          var title = '', h1 = '', og = '', bodyText = '';
+          var low = '';
+          try {
+            var doc = new DOMParser().parseFromString(body, 'text/html');
+            title = (doc.title || '').trim();
+            var h1el = doc.querySelector('h1');
+            h1 = h1el ? (h1el.textContent || '').trim().slice(0, 160) : '';
+            var ogel = doc.querySelector('meta[property="og:title"]');
+            og = ogel ? (ogel.getAttribute('content') || '').trim().slice(0, 160) : '';
+            bodyText = doc.body ? (doc.body.textContent || '').slice(0, 60000) : '';
+            low = body.toLowerCase();
+          } catch (e) { low = String(body).toLowerCase().slice(0, 400000); }
+          var titleHit = null;
+          if (title) {
+            var tll = title.toLowerCase();
+            for (var t = 0; t < v.length; t++) if (tll.indexOf(v[t]) > -1) { titleHit = v[t]; break; }
+          }
+          if (titleHit) {
+            verified++;
+            addNameHit(job.url, 'page title', title.slice(0, 160), titleHit, 40, 'title match');
+          } else {
+            var combined = (title + ' ' + h1 + ' ' + og).toLowerCase();
+            var hHit = null;
+            for (var hh = 0; hh < v.length; hh++) if (combined.indexOf(v[hh]) > -1) { hHit = v[hh]; break; }
+            if (hHit) {
+              verified++;
+              addNameHit(job.url, 'page heading', (h1 || og || title).slice(0, 160), hHit, 25, 'heading match');
+            } else {
+              var bt = (bodyText || '').toLowerCase();
+              var count = 0;
+              for (var bc = 0; bc < v.length; bc++) {
+                var at = 0, g = 0;
+                while (g++ < 12) { var ix = bt.indexOf(v[bc], at); if (ix === -1) break; count++; at = ix + v[bc].length; }
+              }
+              if (count >= 2) {
+                addNameHit(job.url, 'page body', 'mentions name ' + count + 'x', v[0], 18, 'body match');
+              } else if (count === 1 || low.indexOf(v[0]) > -1) {
+                addNameHit(job.url, 'page code', 'mentions name', v[0], 10, 'code mention');
+              } else if (title && title.split(/\s+/).length >= 2) {
+                var ov = wordsOverlap(state.findName, title);
+                if (ov.total > 0 && ov.hit === 0) {
+                  addNameHit(job.url, 'page title', title.slice(0, 140), '', -10, 'title mismatch');
+                }
+              }
+            }
+          }
+          var mentions = low.indexOf(v[0]) > -1 || (v[1] && low.indexOf(v[1]) > -1);
+          if (mentions) {
+            try {
+              var doc2 = new DOMParser().parseFromString(body, 'text/html');
+              var frames = doc2.querySelectorAll('iframe[src], embed[src], object[data]');
+              for (var f = 0; f < frames.length && f < 6; f++) {
+                var fu = frames[f].getAttribute('src') || frames[f].getAttribute('data');
+                if (fu) grabFinder(fu, 'inside ' + hostOf(job.url), 'parent mentions name', v[0], 14, 'nested match', job.url);
+              }
+            } catch (e) { }
+          }
+          reevaluate();
+          render();
+        }
+      }).catch(function () { });
+    }
+    pump();
+  }
+
+  function finishDeep(token, jsHits, verified) {
+    if (token !== state.findToken) return;
+    state.findBusy = false;
+    state.findProgress = { phase: '', done: 0, total: 0 };
+    var n = namedCount();
+    state.findMsg = { ok: n > 0, n: n, verified: verified, jsHits: jsHits };
+    log('find deep done: ' + n + ' named, ' + verified + ' title-verified, ' + jsHits + ' js hits');
+    reevaluate();
+    render();
+    toast(n > 0
+      ? n + ' match' + (n === 1 ? '' : 'es') + ' for "' + state.findName + '"' + (verified ? ' (' + verified + ' title-verified)' : '')
+      : 'No source matched "' + state.findName + '" — try the exact slug');
+  }
+
+  // hunt the page's own sources for URLs that belong to a game name
+  function runFinder(name, opts) {
+    var nm = String(name || '').trim();
+    if (!nm) { toast('Type a game name first'); return; }
+    state.findToken = (state.findToken || 0) + 1;
+    var token = state.findToken;
+    state.findName = nm;
+    state.findVariants = nameVariants(nm);
+    state.findWords = nameWords(nm);
+    findEvidence = {};
+    state.findBusy = true;
+    state.findProgress = { phase: 'local', done: 0, total: 0 };
+    state.filter = 'name';
+    render();
+    var addedLocal = 0;
+    try { addedLocal = runFinderLocal(); } catch (e) { addedLocal = 0; }
+    var nLocal = namedCount();
+    state.findMsg = { ok: nLocal > 0, n: nLocal };
+    log('find "' + nm + '" local: ' + nLocal + ' named, +' + addedLocal + ' new');
+    reevaluate();
+    render();
+    var wantDeep = state.findDeep && (!opts || opts.deep !== false);
+    if (!wantDeep) {
+      state.findBusy = false;
+      state.findProgress = { phase: '', done: 0, total: 0 };
       render();
-    }).catch(function () {
-      if (state.trace && state.trace.url === url) {
-        state.trace.status = 'fail';
-        render();
-      }
-    });
-  }
-
-  function probeTraceFiles(files, url) {
-    var idx = 0, active = 0;
-    function next() {
-      while (active < 6 && idx < files.length) {
-        (function (f) {
-          active++; idx++;
-          var t0 = Date.now();
-          fetch(f.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
-            f.bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
-            f.ms = Date.now() - t0;
-          }).catch(function () { }).then(function () {
-            active--;
-            if (state.trace && state.trace.url === url) { dirty = true; scheduleRender(); }
-            next();
-          });
-        })(files[idx]);
-      }
+      toast(nLocal > 0 ? nLocal + ' matches for "' + nm + '"' : 'No source matched "' + nm + '" — try the exact slug');
+      return;
     }
-    next();
-  }
-
-  function traceHtml() {
-    var tr = state.trace;
-    if (!tr) return '';
-    if (tr.status === 'loading') {
-      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' Tracing package… <span class="gex-spin" style="display:inline-block">' + ICONS.refresh + '</span></div>' +
-        '<div class="gex-trace-sub">fetching the build and reading its loader</div></div>';
-    }
-    if (tr.status === 'fail') {
-      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' Trace failed</div>' +
-        '<div class="gex-trace-sub">the build blocked the proxy — try Harvest instead</div>' +
-        '<button class="gex-mini" data-act="trace-close" style="margin-top:8px">Dismiss</button></div>';
-    }
-    if (!tr.files.length) {
-      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' No packaged assets</div>' +
-        '<div class="gex-trace-sub">this build loads everything inline — nothing extra to grab</div></div>';
-    }
-    var bytes = 0;
-    for (var i = 0; i < tr.files.length; i++) bytes += tr.files[i].bytes || 0;
-    var rowsHtml = '';
-    var shown = tr.files.slice(0, 18);
-    for (var j = 0; j < shown.length; j++) {
-      var f = shown[j];
-      var path = f.url.replace(/^https?:\/\/[^/]+/, '') || '/';
-      rowsHtml += '<div class="gex-tf">' +
-        '<span class="gex-tf-role r-' + f.role + '">' + f.role + '</span>' +
-        '<span class="gex-tf-path" title="' + esc(f.url) + '">' + esc(decodeURIComponent(path)) + '</span>' +
-        '<span class="gex-tf-size">' + (f.bytes ? esc(fmtBytes(f.bytes)) + (f.ms ? ' · ' + f.ms + 'ms' : '') : (f.ms ? f.ms + 'ms' : '…')) + '</span>' +
-        '</div>';
-    }
-    if (tr.files.length > shown.length) rowsHtml += '<div class="gex-trace-sub" style="padding:4px 2px">+' + (tr.files.length - shown.length) + ' more</div>';
-    return '<div class="gex-trace">' +
-      '<div class="gex-trace-h">' + ICONS.layers + ' Package · ' + tr.files.length + ' files' + (bytes ? ' · ~' + esc(fmtBytes(bytes)) : '') + '</div>' +
-      rowsHtml +
-      '<div class="gex-actions" style="margin-top:9px">' +
-      '<button class="gex-mini go" data-act="trace-curl">' + ICONS.term + 'curl script</button>' +
-      '<button class="gex-mini" data-act="trace-manifest">' + ICONS.download + 'manifest.json</button>' +
-      '<button class="gex-mini" data-act="trace-sh">' + ICONS.download + 'download.sh</button>' +
-      '<button class="gex-mini" data-act="trace-close">' + ICONS.x + 'Close</button>' +
-      '</div></div>';
-  }
-
-  function traceCurl() {
-    if (!state.trace || !state.trace.files.length) return;
-    var lines = state.trace.files.map(function (f) {
-      var name = decodeURIComponent((f.url.split('/').pop() || 'file').split('?')[0]);
-      return "curl -L --create-dirs -o '" + name.replace(/'/g, '') + "' '" + f.url + "'";
-    });
-    copyText(lines.join('\n'), lines.length + ' curl lines copied');
-  }
-
-  function traceDownload(asShell) {
-    if (!state.trace || !state.trace.files.length) return;
-    var files = state.trace.files;
-    if (asShell) {
-      var sh = '#!/bin/sh\n# Game Extractor trace · ' + state.trace.url + '\nset -e\nmkdir -p gex-package && cd gex-package\n' +
-        files.map(function (f) {
-          var name = decodeURIComponent((f.url.split('/').pop() || 'file').split('?')[0]).replace(/'/g, '');
-          return "curl -L -o '" + name + "' '" + f.url + "'";
-        }).join('\n') + '\necho "done — ' + files.length + ' files"\n';
-      download(sh, 'gex-download.sh', 'text/x-shellscript');
-      toast('download.sh saved');
-    } else {
-      download(JSON.stringify({
-        generator: 'Game Extractor ' + VERSION,
-        build: state.trace.url,
-        tracedAt: new Date().toISOString(),
-        totalBytes: files.reduce(function (s, f) { return s + (f.bytes || 0); }, 0),
-        files: files.map(function (f) { return { url: f.url, role: f.role, ext: f.ext, bytes: f.bytes || undefined }; })
-      }, null, 2), 'gex-package-manifest.json', 'application/json');
-      toast('manifest.json saved');
-    }
+    toast('Deep search: reading source files…');
+    try { runFinderDeep(token); } catch (e) { finishDeep(token, 0, 0); }
   }
 
   function detailHtml(it) {
@@ -1472,22 +1873,31 @@
         esc(parts[j][0]) + '</span><i><b style="width:' + w + '%;background:' + col + '"></b></i>' +
         '<span style="width:34px;text-align:right;font-family:ui-monospace,monospace;color:#d3d3d8">' + (v > 0 ? '+' + v : v) + '</span></div>';
     }
+    var evHtml = '';
+    try {
+      var evd = findEvidence[keyOf(it.url)];
+      if (evd && evd.findName === state.findName && evd.hits && evd.hits.length) {
+        evHtml = '<div class="gex-ev"><div class="t">name evidence · ' + esc(state.findName) + '</div>';
+        for (var eh = 0; eh < evd.hits.length && eh < 5; eh++) {
+          evHtml += '<div class="e"><span>' + esc(evd.hits[eh].where) + '</span><code>' + esc(evd.hits[eh].snippet || evd.hits[eh].variant || '') + '</code></div>';
+        }
+        evHtml += '</div>';
+      }
+    } catch (e) { }
     return '<div class="gex-detail">' +
       '<div class="gex-kv"><span>host</span><b>' + esc(hostOf(it.url)) + '</b></div>' +
       '<div class="gex-kv"><span>extension</span><b>' + esc(it.ext || '(none)') + '</b></div>' +
       '<div class="gex-kv"><span>engine</span><b>' + esc(it.tech || 'unknown') + '</b></div>' +
       '<div class="gex-kv"><span>seen</span><b>' + it.hits + '× · ' + esc(it.source) + '</b></div>' +
-      (it.mime ? '<div class="gex-kv"><span>server says</span><b>' + esc(it.mime) + (it.bytes ? ' · ' + esc(fmtBytes(it.bytes)) : '') + (typeof it.ms === 'number' ? ' · ' + it.ms + 'ms' : '') + '</b></div>' : '') +
+      (it.mime ? '<div class="gex-kv"><span>server says</span><b>' + esc(it.mime) + (it.bytes ? ' · ' + esc(fmtBytes(it.bytes)) : '') + '</b></div>' : '') +
       (it.raw && it.raw !== it.url ? '<div class="gex-kv"><span>found as</span><b>' + esc(it.raw.slice(0, 120)) + '</b></div>' : '') +
+      evHtml +
       '<div class="gex-parts">' + rows + '</div>' +
       '<div class="gex-actions">' +
       '<button class="gex-mini" data-act="copy-md" data-url="' + esc(it.url) + '">' + ICONS.copy + 'Markdown</button>' +
       '<button class="gex-mini" data-act="copy-curl" data-url="' + esc(it.url) + '">' + ICONS.code + 'curl</button>' +
       '<button class="gex-mini" data-act="copy-embed" data-url="' + esc(it.url) + '">' + ICONS.box + 'Embed</button>' +
-      '<button class="gex-mini' + (state.trace && state.trace.url === it.url ? ' on' : '') + '" data-act="trace" data-url="' + esc(it.url) + '" title="List every file this build loads">' + ICONS.layers + 'Trace package</button>' +
-      '</div>' +
-      (state.trace && state.trace.url === it.url ? traceHtml() : '') +
-      '</div>';
+      '</div></div>';
   }
 
   function rowHtml(it, i) {
@@ -1496,10 +1906,11 @@
     if (best) pills += '<span class="gex-pill best">' + ICONS.spark + 'TOP MATCH</span>';
     pills += '<span class="gex-pill src">' + esc(SOURCE_LABEL[it.source] || it.source) + '</span>';
     if (it.tags.indexOf('named') > -1 || it.tags.indexOf('name') > -1) pills += '<span class="gex-pill dim gex-named">' + ICONS.target + 'named</span>';
+    if (it.tags.indexOf('title-ok') > -1) pills += '<span class="gex-pill dim gex-titleok">title ✓</span>';
     if (it.tech) pills += '<span class="gex-pill dim gex-tech">' + esc(it.tech) + '</span>';
     var shown = 0;
     for (var t = 0; t < it.tags.length && shown < 2; t++) {
-      if (it.tags[t] === it.tech || it.tags[t] === 'name' || it.tags[t] === 'named') continue;
+      if (it.tags[t] === it.tech || it.tags[t] === 'name' || it.tags[t] === 'named' || it.tags[t] === 'title-ok' || it.tags[t] === 'title-miss') continue;
       pills += '<span class="gex-pill dim">' + esc(it.tags[t]) + '</span>';
       shown++;
     }
@@ -1508,8 +1919,7 @@
     var h = hostOf(u);
     var fav = isFav(u);
     var open = state.expanded === it.id;
-    var fresh = typeof it.born === 'number' && Date.now() - it.born < 2600;
-    return '<div class="gex-card' + (best ? ' top' : '') + (fresh ? ' fresh' : '') + '">' +
+    return '<div class="gex-card' + (best ? ' top' : '') + '">' +
       '<div class="gex-host"><img src="' + faviconFor(h) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
       '<span>' + esc(h || 'local file') + '</span><em>' + esc(it.ext || (it.tech || 'page')) + ' · ' + it.hits + '×</em>' +
       '<button class="gex-fav' + (fav ? ' on' : '') + '" data-act="fav" data-url="' + esc(u) + '" title="Pin to favorites">' + (fav ? ICONS.starOn : ICONS.star) + '</button></div>' +
@@ -1563,18 +1973,28 @@
 
   function findRowHtml() {
     if (!state.findOpen && !state.findName) return '';
-    var derived = deriveName();
+    var derived = '';
+    try { derived = deriveName(); } catch (e) { derived = ''; }
     var msg = '';
-    if (state.findMsg) {
-      msg = state.findMsg.ok
-        ? '<span class="gex-findok">✓ ' + state.findMsg.n + ' match' + (state.findMsg.n === 1 ? '' : 'es') + '</span>'
-        : '<span class="gex-findmiss">no source matched — try the exact slug</span>';
+    if (state.findBusy && state.findProgress && state.findProgress.total) {
+      msg = '<span class="gex-findprog"><span class="spin"></span>deep ' + state.findProgress.done + '/' + state.findProgress.total + '</span>';
+    } else if (state.findBusy) {
+      msg = '<span class="gex-findprog"><span class="spin"></span>searching…</span>';
+    } else if (state.findMsg) {
+      if (state.findMsg.ok) {
+        msg = '<span class="gex-findok">✓ ' + state.findMsg.n + ' match' + (state.findMsg.n === 1 ? '' : 'es');
+        if (state.findMsg.verified) msg += ' · ' + state.findMsg.verified + ' ✓title';
+        msg += '</span>';
+      } else {
+        msg = '<span class="gex-findmiss">no source matched — try the exact slug</span>';
+      }
     }
     return '<div class="gex-findbar">' + ICONS.target +
       '<span class="gex-findlabel">find</span>' +
       (state.findName ? '<span class="gex-findq">' + esc(state.findName) + '</span>' : '') +
       '<input type="text" data-finder value="' + esc(state.findInput) + '" placeholder="' + (derived ? 'e.g. ' + esc(derived) : 'game name') + '" spellcheck="false" aria-label="Game name">' +
-      '<button class="gex-mini go" data-act="find-go" title="Search the page source for this name">Find</button>' +
+      '<button class="gex-mini go" data-act="find-go" title="Search every source for this name (deep reads external files)">Find</button>' +
+      '<button class="gex-mini' + (state.findDeep ? ' on' : '') + '" data-act="find-deep" title="Deep: also fetch external scripts and candidate pages">deep</button>' +
       msg +
       (state.findName ? '<button class="gex-mini" data-act="find-clear" title="Clear name filter">Clear</button>' : '') +
       '</div>';
@@ -2105,8 +2525,23 @@
       runFinder((finput ? finput.value : state.findInput) || deriveName());
       return;
     }
+    if (act === 'find-deep') {
+      state.findDeep = !state.findDeep;
+      try { localStorage.setItem('gex:finddeep', state.findDeep ? '1' : '0'); } catch (e) { }
+      render();
+      if (state.findDeep && state.findName && !state.findBusy) {
+        state.findToken = (state.findToken || 0) + 1;
+        state.findBusy = true;
+        runFinderDeep(state.findToken);
+      }
+      return;
+    }
     if (act === 'find-clear') {
-      state.findName = ''; state.findVariants = []; state.findMsg = null; state.findInput = '';
+      state.findToken = (state.findToken || 0) + 1;
+      state.findName = ''; state.findVariants = []; state.findWords = [];
+      state.findMsg = null; state.findInput = ''; state.findBusy = false;
+      state.findProgress = { phase: '', done: 0, total: 0 };
+      findEvidence = {};
       if (state.filter === 'name') state.filter = 'all';
       reevaluate(); render();
       return;
@@ -2121,21 +2556,6 @@
       state.expanded = state.expanded === id ? 0 : id;
       render(); return;
     }
-
-    if (act === 'trace') {
-      if (state.expanded !== (items.filter(function (x) { return x.url === url; })[0] || {}).id) {
-        // make sure the expanded panel for this row is open
-        var hit = null;
-        for (var ti = 0; ti < items.length; ti++) if (items[ti].url === url) hit = items[ti];
-        if (hit) state.expanded = hit.id;
-      }
-      traceBuild(url);
-      return;
-    }
-    if (act === 'trace-curl') { traceCurl(); return; }
-    if (act === 'trace-manifest') { traceDownload(false); return; }
-    if (act === 'trace-sh') { traceDownload(true); return; }
-    if (act === 'trace-close') { state.trace = null; render(); return; }
 
     if (act === 'copy') {
       copyText(url, 'URL copied');
@@ -2216,6 +2636,8 @@
   }
 
   function teardown() {
+    try { state.findToken = (state.findToken || 0) + 1; } catch (e) { }
+    state.findBusy = false;
     try { if (mo) mo.disconnect(); } catch (e) { }
     mo = null;
     try { closeTheater(true); } catch (e) { }
@@ -2243,11 +2665,23 @@
     show: function () { setMinimised(false); },
     rescan: function () { scanAll('api'); },
     urls: function () { return items.map(function (i) { return i.url; }); },
-    find: function (name) {
+    find: function (name, opts) {
       state.findOpen = true;
       state.findInput = name || '';
       render();
-      if (name) runFinder(name);
+      if (name) runFinder(name, opts || {});
+    },
+    findDeep: function (name) {
+      state.findDeep = true;
+      state.findOpen = true;
+      render();
+      runFinder(name || deriveName(), { deep: true });
+    },
+    evidence: function (url) {
+      try {
+        var ev = findEvidence[keyOf(url)];
+        return ev && ev.findName === state.findName ? ev : null;
+      } catch (e) { return null; }
     },
     named: function () { return items.filter(function (i) { return namedMatch(i); }).map(function (i) { return i.url; }); },
     favorites: function () { return Object.keys(favs); },
