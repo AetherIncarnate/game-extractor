@@ -1,21 +1,18 @@
 /*!
- * ============================================================================
- *  GAME EXTRACTOR  —  v3.0 "Sleek"
- *  Pull the real playable build out of a web page.
- * ----------------------------------------------------------------------------
- *  Use only on sites you own or are explicitly authorised to test.
- *  Zero dependencies, vanilla JS. Works as a userscript, a bookmarklet, or
- *  pasted straight into DevTools.
+ * GAME EXTRACTOR — v3.0
+ * Surface the playable build behind a game page.
  *
- *  Re-run the snippet to minimise / restore · Alt+G toggles · Esc minimises.
- * ============================================================================
+ * Use only on sites you own or are authorised to test.
+ * One IIFE, zero dependencies, MIT.
+ *
+ * Load it from github.com/AetherIncarnate/game-extractor
+ * (bookmarklet loader, console snippet or Tampermonkey script).
+ *
+ * Re-running toggles the panel · Alt+G toggles · Esc minimises.
  */
 (function () {
   'use strict';
 
-  /* ------------------------------------------------------------------ *
-   * 0. Singleton guard
-   * ------------------------------------------------------------------ */
   var VERSION = '3.0.0';
   var ROOT_ID = 'gex-root';
 
@@ -24,9 +21,6 @@
     return;
   }
 
-  /* ------------------------------------------------------------------ *
-   * 1. Settings (persisted, with legacy migration)
-   * ------------------------------------------------------------------ */
   var DEFAULTS = {
     excludeAssets: true,    // drop images / fonts / css / video
     strict: false,          // only obvious game endpoints
@@ -66,9 +60,6 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function clamp(n, a, b) { return n < a ? a : n > b ? b : n; }
 
-  /* ------------------------------------------------------------------ *
-   * 2. Tiny utils
-   * ------------------------------------------------------------------ */
   var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
   function esc(s) {
@@ -105,9 +96,6 @@
   var CURRENT_HOST = safeHost();
   var CORE = coreDomain(CURRENT_HOST);
 
-  /* ------------------------------------------------------------------ *
-   * 3. URL normalisation + proxy unwrapping
-   * ------------------------------------------------------------------ */
   var PROXY_PARAMS = ['url', 'u', 'src', 'source', 'target', 'dest', 'destination',
     'proxy', 'proxyurl', 'proxied', 'link', 'q', 'game', 'gameurl', 'embed',
     'embedurl', 'path', 'remote', 'site', 'host', 'data', 'ref', 'goto'];
@@ -189,9 +177,6 @@
     } catch (e) { return null; }
   }
 
-  /* ------------------------------------------------------------------ *
-   * 4. Classification
-   * ------------------------------------------------------------------ */
   var PATH_HINTS = ['game', 'games', 'play', 'player', 'embed', 'iframe', 'rom', 'roms',
     'build', 'builds', 'demo', 'arcade', 'webgl', 'wasm', 'unity', 'godot', 'construct',
     'gdevelop', 'ruffle', 'swf', 'emulator', 'emulatorjs', 'loader', 'engine', 'level',
@@ -302,12 +287,8 @@
 
     return { score: score, tags: tags };
   }
-
-  /* ------------------------------------------------------------------ *
-   * 5. Result store & UI initialization
-   * ------------------------------------------------------------------ */
-  var items = [];
-  var seen = {};
+  var items = [];   // sorted + deduped
+  var seen = {};    // normalised url -> index
   var order = 0;
   var dirty = false;
   var status = 'idle';
@@ -368,32 +349,1072 @@
     for (var i = 0; i < items.length; i++) seen[keyOf(items[i].url)] = i;
   }
 
-  function scanAll(label) {
-    status = 'scanning';
-    var t0 = Date.now();
-    try { scanDocument(document, document.baseURI); } catch (e) { }
-    status = 'done';
-    scheduleRender();
-  }
-
-  function scheduleFullScan() {
-    scanAll('auto');
+  function probeSize(item) {
+    if (!/^https?:/.test(item.url) || item.probing) return;
+    item.probing = true;
+    fetch(item.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
+      item.bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
+      item.mime = r.headers.get('content-type') || '';
+      item.ok = r.ok;
+      item.probing = false;
+      dirty = true; scheduleRender();
+    }).catch(function () { item.probing = false; item.mime = 'unreachable'; });
   }
 
   function scanDocument(doc, base) {
+    var b = base || (doc && doc.baseURI) || document.baseURI;
+
+    var frameSel = [['iframe', 'iframe'], ['frame', 'iframe'], ['embed', 'embed'],
+      ['object', 'embed'], ['video', 'media'], ['audio', 'media'], ['source', 'media'], ['track', 'media']];
+    for (var f = 0; f < frameSel.length; f++) {
+      try {
+        var list = doc.querySelectorAll(frameSel[f][0]);
+        for (var i = 0; i < list.length; i++) {
+          var el = list[i];
+          var val = frameSel[f][0] === 'object' ? el.getAttribute('data') : el.getAttribute('src');
+          if (val) addCandidate(val, frameSel[f][1]);
+        }
+      } catch (e) { /* keep going */ }
+    }
+
     try {
-      var list = doc.querySelectorAll('iframe, frame, embed, object');
-      for (var i = 0; i < list.length; i++) {
-        var el = list[i];
-        var val = el.tagName === 'OBJECT' ? el.getAttribute('data') : el.getAttribute('src');
-        if (val) addCandidate(val, 'iframe');
+      var sd = doc.querySelectorAll('iframe[srcdoc]');
+      for (var s = 0; s < sd.length; s++) {
+        var html = sd[s].getAttribute('srcdoc') || '';
+        if (html && html.length < 600000) {
+          var parsed = new DOMParser().parseFromString(html, 'text/html');
+          var bl = parsed.createElement('base');
+          bl.setAttribute('href', b);
+          (parsed.head || parsed.documentElement).appendChild(bl);
+          scanDocument(parsed, b);
+        }
+      }
+    } catch (e) { /* noop */ }
+
+    try {
+      var anchors = doc.querySelectorAll('a[href]');
+      for (var a = 0; a < anchors.length; a++) addCandidate(anchors[a].getAttribute('href'), 'link');
+    } catch (e) { /* noop */ }
+
+    try {
+      var res = doc.querySelectorAll('script[src], link[href]');
+      for (var r = 0; r < res.length; r++) {
+        var node = res[r];
+        var href = node.getAttribute('src') || node.getAttribute('href') || '';
+        if (!href) continue;
+        if (node.tagName === 'LINK') {
+          var rel = (node.getAttribute('rel') || '').toLowerCase();
+          if (!/preload|prefetch|modulepreload|alternate|import/.test(rel)) continue;
+        }
+        addCandidate(href, 'script');
+      }
+    } catch (e) { /* noop */ }
+
+    try {
+      var INTERESTING = /^(data-(?:src|url|game|iframe|link|href|embed|config|build|path|swf|rom|file)|src|href|data|content|value|flashvars)$/i;
+      var all = doc.querySelectorAll('*');
+      var cap = Math.min(all.length, 6000);
+      for (var n = 0; n < cap; n++) {
+        var node2 = all[n];
+        if (!node2.attributes) continue;
+        for (var j = 0; j < node2.attributes.length; j++) {
+          var at = node2.attributes[j];
+          if (!INTERESTING.test(at.name)) continue;
+          var v = at.value;
+          if (!v || v.length < 4 || v.length > 2000) continue;
+          if (/^(#|javascript:|mailto:|\{|%7B|\[\{)/i.test(v.trim())) continue;
+          addCandidate(v, 'attr');
+        }
+      }
+    } catch (e) { /* noop */ }
+
+    collectFromInlineScripts(doc);
+  }
+
+  function markSweep() { scheduleFullScan(); }
+
+  function collectFromInlineScripts(doc) {
+    try {
+      var scripts = doc.querySelectorAll('script:not([src])');
+      for (var i = 0; i < scripts.length; i++) {
+        var s = scripts[i];
+        var text = (s.textContent || '').trim();
+        if (!text || text.length > 900000) continue;
+        var type = (s.getAttribute('type') || '').toLowerCase();
+        var looksJson = type.indexOf('json') > -1 || /^\s*[\[{]/.test(text);
+
+        if (looksJson) {
+          try {
+            var hits = [];
+            walkJson(JSON.parse(text), hits, 0);
+            for (var h = 0; h < hits.length; h++) addCandidate(hits[h], 'json');
+          } catch (e) { /* not real json */ }
+        }
+
+        var cfgs = text.match(/(?:window\.)?[A-Za-z_$][\w$]{2,40}\s*=\s*\{[\s\S]{0,3000}?\}\s*[;,]/g) || [];
+        for (var c = 0; c < cfgs.length && c < 60; c++) {
+          var body = cfgs[c].slice(cfgs[c].indexOf('{'));
+          try {
+            var obj = JSON.parse(body
+              .replace(/([{,]\s*)'([^']+?)'\s*:/g, '$1"$2":')
+              .replace(/:\s*'([^']*?)'/g, ': "$1"')
+              .replace(/,(\s*[}\]])/g, '$1')
+              .replace(/\/\*[\s\S]*?\*\//g, ''));
+            var hits2 = [];
+            walkJson(obj, hits2, 0);
+            for (var h2 = 0; h2 < hits2.length; h2++) addCandidate(hits2[h2], 'json');
+          } catch (e) { /* best effort */ }
+        }
+
+        var abs = text.match(/https?:\/\/[^\s"'`<>()\\]+/gi) || [];
+        for (var x = 0; x < abs.length; x++) addCandidate(abs[x].replace(/[.,;)\]}'"]+$/, ''), 'script');
+
+        var rel = text.match(/["'`(](\/[A-Za-z0-9_.\-/]{3,120}\.(?:html?|swf|wasm|unityweb|data|pck|zip|json))(?:[?#][^"'`)]*)?["'`)]/gi) || [];
+        for (var y = 0; y < rel.length; y++) addCandidate(rel[y].replace(/^["'`(]|["'`)]$/g, ''), 'script');
       }
     } catch (e) { /* noop */ }
   }
 
-  function instH() {}
-  function instO() {}
-  function scheduleRender() {}
+  function walkJson(node, out, depth) {
+    if (depth > 7 || out.length > 300 || !node) return;
+    if (typeof node === 'string') {
+      if (node.length > 4 && node.length < 2000 &&
+        (/^https?:\/\//i.test(node) || /^\/\//.test(node) ||
+          /^\/[\w.\-/]+\.(?:html?|swf|wasm|unityweb|data|pck|zip)$/i.test(node))) out.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (var i = 0; i < node.length; i++) walkJson(node[i], out, depth + 1);
+      return;
+    }
+    if (typeof node !== 'object') return;
+    for (var k in node) {
+      if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
+      var v = node[k];
+      if (typeof v === 'string' && /url|src|href|game|embed|build|link|path|target|file/i.test(k)) {
+        if (v.length > 4 && v.length < 2000) out.push(v);
+      } else {
+        walkJson(v, out, depth + 1);
+      }
+    }
+  }
 
-  scanAll('init');
+  var GLOBAL_KEYS = ['gameUrl', 'gameURL', 'gGameUrl', 'EJS_gameUrl', 'EJS_core', 'EJS_gameID',
+    'EJS_pathtodata', 'EJS_startOnLoaded', 'EJS_options', 'EJS_defaultOptions', 'EJS_Buttons',
+    'gameSrc', 'gamePath', 'embedUrl', 'embedURL', 'iframeUrl', 'iframeSrc', 'uGameUrl',
+    'gameConfig', 'gameOptions', 'gameSettings', 'arcadeUrl', 'buildUrl', 'bundleUrl',
+    'loaderUrl', 'contentUrl', 'playUrl', 'swfUrl', 'romUrl', 'fileUrl', 'gameId',
+    '__uv$config', '__scramble$config', '__dynamic$config'];
+
+  function scanGlobals() {
+    var checked = 0;
+    function tryKey(key) {
+      if (checked++ > 700) return;
+      var val;
+      try { val = window[key]; } catch (e) { return; }
+      if (!val) return;
+      if (typeof val === 'string') { addCandidate(val, 'global'); return; }
+      if (typeof val === 'object') {
+        var hits = [];
+        try { walkJson(val, hits, 0); } catch (e) { return; }
+        for (var i = 0; i < hits.length && i < 40; i++) addCandidate(hits[i], 'global');
+      }
+    }
+    for (var i = 0; i < GLOBAL_KEYS.length; i++) tryKey(GLOBAL_KEYS[i]);
+    try {
+      var keys = Object.getOwnPropertyNames(window);
+      for (var k = 0; k < keys.length; k++) {
+        if (/game|embed|iframe|rom|swf|wasm|build|arcade|loader|bundle|unity|godot|ejs/i.test(keys[k])) tryKey(keys[k]);
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  function scanStorage() {
+    var stores = [function () { return window.localStorage; }, function () { return window.sessionStorage; }];
+    for (var s = 0; s < stores.length; s++) {
+      try {
+        var box = stores[s]();
+        if (!box) continue;
+        for (var i = 0; i < box.length && i < 200; i++) {
+          var v = String(box.getItem(box.key(i)) || '');
+          if (v.length > 4000) continue;
+          var m = v.match(/https?:\/\/[^\s"'<>]+|\/[\w.\-]{3,120}\.(?:html?|swf|wasm|unityweb|zip|data|pck)/gi) || [];
+          for (var j = 0; j < m.length; j++) addCandidate(m[j], 'storage');
+        }
+      } catch (e) { /* blocked */ }
+    }
+  }
+
+  function scanMeta() {
+    try {
+      var nodes = document.querySelectorAll('meta[content], base[href]');
+      for (var i = 0; i < nodes.length; i++) {
+        var v = nodes[i].getAttribute('content') || nodes[i].getAttribute('href') || '';
+        if (v && v.length > 7 && v.length < 2000) addCandidate(v, 'attr');
+      }
+      var ld = document.querySelectorAll('script[type="application/ld+json"]');
+      for (var j = 0; j < ld.length; j++) {
+        try {
+          var hits = [];
+          walkJson(JSON.parse(ld[j].textContent || '{}'), hits, 0);
+          for (var h = 0; h < hits.length; h++) addCandidate(hits[h], 'json');
+        } catch (e) { /* noop */ }
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  function scanShadow(root, depth) {
+    if (depth > 4) return;
+    var all;
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    var cap = Math.min(all.length, 3000);
+    for (var i = 0; i < cap; i++) {
+      var el = all[i];
+      var sr = el.shadowRoot;
+      if (!sr) continue;
+      scanShadow(sr, depth + 1);
+      try {
+        var found = sr.querySelectorAll('iframe,embed,object,a[href],script[src]');
+        for (var f = 0; f < found.length; f++) {
+          var n = found[f];
+          addCandidate(n.getAttribute('src') || n.getAttribute('data') || n.getAttribute('href'), 'attr');
+        }
+      } catch (e) { /* noop */ }
+    }
+  }
+
+  var lastAutoScan = 0;
+  var fullScanTimer = null;
+
+  function scanAll(label) {
+    status = 'scanning';
+    render();
+    var t0 = Date.now();
+    try { scanDocument(document, document.baseURI); } catch (e) { }
+    try { scanGlobals(); } catch (e) { }
+    try { scanStorage(); } catch (e) { }
+    try { scanMeta(); } catch (e) { }
+    try { scanShadow(document, 0); } catch (e) { }
+    status = 'done';
+    log('scan "' + (label || 'manual') + '" → ' + items.length + ' hits in ' + (Date.now() - t0) + 'ms');
+    scheduleRender();
+  }
+
+  function scheduleFullScan() {
+    if (fullScanTimer) return;
+    var since = Date.now() - lastAutoScan;
+    fullScanTimer = setTimeout(function () {
+      fullScanTimer = null;
+      lastAutoScan = Date.now();
+      scanAll('auto');
+    }, Math.max(150, 1500 - since));
+  }
+
+  var restoreHooks = [];
+
+  function installHooks() {
+    if (!settings.liveCapture) return;
+
+    try {
+      var of = window.fetch;
+      if (typeof of === 'function') {
+        window.fetch = function (input) {
+          try {
+            var u = typeof input === 'string' ? input : (input && input.url);
+            if (u) addCandidate(u, 'live-fetch');
+          } catch (e) { }
+          return of.apply(this, arguments);
+        };
+        restoreHooks.push(function () { window.fetch = of; });
+      }
+    } catch (e) { /* frozen */ }
+
+    try {
+      var oo = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        try { if (url) addCandidate(url, 'live-xhr'); } catch (e) { }
+        return oo.apply(this, arguments);
+      };
+      restoreHooks.push(function () { XMLHttpRequest.prototype.open = oo; });
+    } catch (e) { /* frozen */ }
+
+    try {
+      var desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+      if (desc && desc.set && desc.configurable) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+          configurable: true,
+          enumerable: desc.enumerable,
+          get: function () { return desc.get.call(this); },
+          set: function (v) {
+            try { if (v) addCandidate(v, 'live-iframe'); } catch (e) { }
+            desc.set.call(this, v);
+          }
+        });
+        restoreHooks.push(function () { Object.defineProperty(HTMLIFrameElement.prototype, 'src', desc); });
+      }
+    } catch (e) { /* frozen */ }
+
+    try {
+      var po = new PerformanceObserver(function (list) {
+        var entries = list.getEntries();
+        for (var i = 0; i < entries.length; i++) {
+          var it = entries[i].initiatorType;
+          if (it === 'fetch' || it === 'xmlhttprequest' || it === 'iframe' || it === 'other') {
+            addCandidate(entries[i].name, 'network');
+          }
+        }
+      });
+      try { po.observe({ type: 'resource', buffered: true }); }
+      catch (e1) { po.observe({ entryTypes: ['resource'] }); }
+      restoreHooks.push(function () { try { po.disconnect(); } catch (e) { } });
+    } catch (e) { /* unsupported */ }
+  }
+
+  var mo = null;
+
+  function installObserver() {
+    if (!('MutationObserver' in window)) return;
+    mo = new MutationObserver(function (muts) {
+      var nodes = [];
+      for (var i = 0; i < muts.length; i++) {
+        var m = muts[i];
+        if (m.type === 'attributes') { nodes.push(m.target); continue; }
+        for (var j = 0; j < m.addedNodes.length; j++) {
+          var n = m.addedNodes[j];
+          if (n && n.nodeType === 1 && !insidePanel(n)) nodes.push(n);
+        }
+      }
+      if (!nodes.length) return;
+      for (var k = 0; k < nodes.length; k++) {
+        var el = nodes[k];
+        try {
+          if (el.matches && el.matches('iframe,embed,object,a[href],script[src]')) {
+            addCandidate(el.getAttribute('src') || el.getAttribute('data') || el.getAttribute('href'),
+              el.tagName === 'IFRAME' ? 'iframe' : el.tagName === 'A' ? 'link' : 'dom');
+          }
+          if (el.getAttribute && el.getAttribute('srcdoc')) markSweep(); // nested page → full sweep
+          if (el.querySelectorAll) {
+            var fr = el.querySelectorAll('iframe,embed,object');
+            for (var q = 0; q < fr.length; q++) {
+              addCandidate(fr[q].getAttribute('src') || fr[q].getAttribute('data'),
+                fr[q].tagName === 'IFRAME' ? 'iframe' : 'embed');
+            }
+            var an = el.querySelectorAll('a[href]');
+            for (var w = 0; w < an.length; w++) addCandidate(an[w].getAttribute('href'), 'link');
+          }
+        } catch (e) { /* detached */ }
+      }
+      scheduleFullScan();
+    });
+    mo.observe(document.documentElement || document, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['src', 'data', 'href', 'srcdoc', 'data-url', 'data-src', 'data-srcdoc']
+    });
+  }
+
+  function insidePanel(n) {
+    var rootEl = document.getElementById(ROOT_ID);
+    return !!(rootEl && (rootEl === n || rootEl.contains(n)));
+  }
+
+  var state = { min: false, query: '', filter: 'all', showAll: false };
+  var POS_KEY = 'gex:pos';
+
+  var CSS = [
+    '#' + ROOT_ID + '{position:fixed;top:18px;left:50%;transform:translateX(-50%);width:min(94vw,660px);z-index:2147483000;color:#f5f5f7;',
+    'font:400 13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,"Segoe UI",sans-serif;',
+    '-webkit-font-smoothing:antialiased;letter-spacing:-.01em;box-sizing:border-box;',
+    'background:rgba(23,23,26,.86);backdrop-filter:blur(28px) saturate(170%);-webkit-backdrop-filter:blur(28px) saturate(170%);',
+    'border:1px solid rgba(255,255,255,.09);border-radius:20px;',
+    'box-shadow:0 32px 80px -12px rgba(0,0,0,.75),0 0 0 .5px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);}',
+    '#' + ROOT_ID + ' *{box-sizing:border-box;font-family:inherit;margin:0;padding:0;}',
+    '#' + ROOT_ID + ' button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}',
+    '#' + ROOT_ID + ' svg{display:block;flex:none;}',
+    '#gex-min{position:fixed;right:20px;bottom:20px;z-index:2147483000;display:flex;align-items:center;gap:8px;padding:9px 14px 9px 11px;',
+    'border-radius:999px;background:rgba(23,23,26,.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);',
+    'border:1px solid rgba(255,255,255,.1);color:#a9a9b0;font:500 12px/1 -apple-system,system-ui,sans-serif;',
+    'box-shadow:0 12px 32px rgba(0,0,0,.5);}#gex-min:hover{color:#fff;border-color:rgba(255,255,255,.22);}',
+    '#gex-min .dot{width:7px;height:7px;border-radius:50%;background:#30d158;box-shadow:0 0 0 3px rgba(48,209,88,.22);}',
+    '.gex-head{display:flex;align-items:center;gap:9px;padding:12px 12px 11px 14px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;}',
+    '.gex-head.grabbing{cursor:grabbing;}',
+    '.gex-grip{color:rgba(255,255,255,.16);display:flex;}',
+    '.gex-mark{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;flex:none;',
+    'background:linear-gradient(150deg,#0a84ff,#5e5ce6 55%,#bf5af2);box-shadow:0 4px 12px rgba(10,132,255,.35),inset 0 1px 0 rgba(255,255,255,.25);}',
+    '.gex-title{font-size:13px;font-weight:600;letter-spacing:-.02em;color:#fff;}',
+    '.gex-v{font-size:10px;color:#8e8e93;border:1px solid rgba(255,255,255,.09);padding:2px 7px;border-radius:999px;font-weight:500;}',
+    '.gex-live{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#30d158;font-weight:500;}',
+    '.gex-live i{width:6px;height:6px;border-radius:50%;background:#30d158;animation:gexPulse 1.9s ease-in-out infinite;}',
+    '@keyframes gexPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(48,209,88,.45)}50%{opacity:.5;box-shadow:0 0 0 4px rgba(48,209,88,0)}}',
+    '.gex-tool{padding:0 14px 11px;display:flex;flex-direction:column;gap:8px;}',
+    '.gex-row{display:flex;gap:7px;align-items:center;}',
+    '.gex-field{flex:1;display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);',
+    'border-radius:10px;padding:7px 11px;color:#8e8e93;transition:border-color .15s,background .15s;min-width:0;}',
+    '.gex-field:focus-within{border-color:rgba(10,132,255,.55);background:rgba(10,132,255,.09);}',
+    '.gex-field input{flex:1;background:none;border:0;outline:none;color:#fff;font-size:12px;min-width:0;}',
+    '.gex-field input::placeholder{color:rgba(142,142,147,.7);}',
+    '.gex-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border-radius:10px;font-size:11.5px;font-weight:500;',
+    'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:#d3d3d8;transition:all .14s ease;white-space:nowrap;flex:none;}',
+    '.gex-btn:hover{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.16);}',
+    '.gex-btn:active{transform:scale(.97);}',
+    '.gex-btn.ghost{background:transparent;border-color:transparent;color:#8e8e93;}',
+    '.gex-btn.ghost:hover{color:#fff;background:rgba(255,255,255,.07);}',
+    '.gex-tabs{display:flex;gap:2px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);padding:2px;border-radius:9px;overflow-x:auto;}',
+    '.gex-tab{padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:500;color:#8e8e93;transition:all .13s;white-space:nowrap;flex:none;}',
+    '.gex-tab:hover{color:#d3d3d8;}',
+    '.gex-tab.on{background:rgba(255,255,255,.11);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);}',
+    '.gex-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px 9px;font-size:10.5px;color:#7c7c81;}',
+    '.gex-meta b{color:#d3d3d8;font-weight:600;}',
+    '.gex-body{max-height:min(46vh,380px);overflow:auto;padding:0 10px 6px 14px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent;}',
+    '.gex-body::-webkit-scrollbar{width:8px;}',
+    '.gex-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px;border:2px solid transparent;background-clip:content-box;}',
+    '.gex-body::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28);background-clip:content-box;}',
+    '.gex-card{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.032);border-radius:13px;padding:9px 11px;margin-bottom:7px;',
+    'transition:border-color .14s,background .14s;}',
+    '.gex-card:hover{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.055);}',
+    '.gex-card.top{border-color:rgba(48,209,88,.34);background:linear-gradient(180deg,rgba(48,209,88,.09),rgba(255,255,255,.03));}',
+    '.gex-topline{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;}',
+    '.gex-rank{font-size:9.5px;font-weight:700;color:#63636a;width:14px;flex:none;}',
+    '.gex-pill{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;padding:2px 7px;border-radius:999px;letter-spacing:.02em;}',
+    '.gex-pill.best{background:rgba(48,209,88,.16);color:#4cd964;border:1px solid rgba(48,209,88,.3);}',
+    '.gex-pill.src{background:rgba(10,132,255,.13);color:#7cb8ff;border:1px solid rgba(10,132,255,.22);text-transform:uppercase;letter-spacing:.07em;}',
+    '.gex-pill.dim{background:rgba(255,255,255,.055);color:#8e8e93;border:1px solid rgba(255,255,255,.07);}',
+    '.gex-url{font:400 10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#a9a9b0;word-break:break-all;cursor:text;}',
+    '.gex-url b{color:#ececf1;font-weight:500;}',
+    '.gex-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}',
+    '.gex-mini{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;font-size:10px;font-weight:500;',
+    'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);color:#b9b9c0;transition:all .13s;}',
+    '.gex-mini:hover{background:rgba(255,255,255,.11);color:#fff;}',
+    '.gex-mini.go{background:linear-gradient(180deg,#2c95ff,#0a73e8);color:#fff;border-color:rgba(255,255,255,.14);}',
+    '.gex-mini.go:hover{filter:brightness(1.12);color:#fff;}',
+    '.gex-bar{height:2px;border-radius:2px;background:rgba(255,255,255,.07);margin-top:7px;overflow:hidden;}',
+    '.gex-bar i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,#0a84ff,#5e5ce6);}',
+    '.gex-foot{display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid rgba(255,255,255,.07);flex-wrap:wrap;}',
+    '.gex-hint{font-size:10px;color:#6a6a70;display:flex;align-items:center;gap:3px;flex-wrap:wrap;}',
+    '.gex-hint kbd{font:600 9.5px ui-monospace,monospace;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 4px;color:#a9a9b0;}',
+    '.gex-empty{border:1px dashed rgba(255,255,255,.12);border-radius:13px;padding:20px 16px;text-align:center;color:#7c7c81;font-size:11.5px;line-height:1.6;}',
+    '.gex-empty b{display:block;color:#d3d3d8;font-weight:600;font-size:12px;margin-bottom:3px;}',
+    '.gex-set{padding:2px 14px 12px;}',
+    '.gex-panel{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.028);border-radius:14px;padding:11px 13px;}',
+    '.gex-set h4{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#8e8e93;margin-bottom:6px;}',
+    '.gex-opt{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;}',
+    '.gex-opt .lbl{font-size:12px;color:#d8d8de;}',
+    '.gex-opt .sub{display:block;font-size:10px;color:#7c7c81;margin-top:1px;font-weight:400;}',
+    '.gex-sw{position:relative;width:36px;height:21px;flex:none;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.08);transition:background .2s;cursor:pointer;}',
+    '.gex-sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s cubic-bezier(.3,1.4,.5,1);}',
+    '.gex-sw.on{background:#30d158;border-color:rgba(48,209,88,.5);}',
+    '.gex-sw.on i{transform:translateX(15px);}',
+    '.gex-num{display:flex;align-items:center;gap:8px;}',
+    '.gex-num input[type=range]{-webkit-appearance:none;appearance:none;width:104px;height:3px;border-radius:3px;background:rgba(255,255,255,.16);outline:none;}',
+    '.gex-num input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer;}',
+    '.gex-num input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff;cursor:pointer;}',
+    '.gex-num output{font:600 10.5px ui-monospace,monospace;color:#fff;min-width:20px;text-align:right;}',
+    '.gex-toast{position:absolute;left:50%;bottom:50px;transform:translateX(-50%);background:rgba(48,209,88,.95);color:#04120a;',
+    'font-size:11px;font-weight:600;padding:7px 13px;border-radius:999px;box-shadow:0 8px 22px rgba(0,0,0,.4);pointer-events:none;animation:gexIn .2s ease;z-index:3;white-space:nowrap;}',
+    '@keyframes gexIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}',
+    '.gex-more{width:100%;padding:8px;margin:1px 0 6px;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.12);color:#a9a9b0;font-size:11px;}',
+    '.gex-more:hover{background:rgba(255,255,255,.09);color:#fff;}'
+  ].join('\n');
+
+  var ICONS = {
+    logo: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M6.5 11.5h3.5M8.25 9.75v3.5"/><circle cx="15.5" cy="10.75" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="13" r="1" fill="currentColor" stroke="none"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>',
+    search: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+    download: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10L12 14.5 16.5 10"/><path d="M4 20h16"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 4.5v5h-5"/><path d="M20.2 14a8.2 8.2 0 1 1-1.3-6.4l1.6-1.7"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H4.5A1.5 1.5 0 0 1 3 13.5V4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V6"/></svg>',
+    open: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>',
+    box: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M3 8.5v7L12 20l9-4.5v-7"/><path d="M12 13v7"/></svg>',
+    code: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l-5 6 5 6M15 6l5 6-5 6"/></svg>',
+    ruler: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15.5 15.5 3l5.5 5.5L8.5 21z"/><path d="M7 12l2 2M10.5 8.5l2 2M14 5l2 2"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 2.5l2.3 6.8 6.7 2.4-6.7 2.4L12 21l-2.3-6.9L3 11.7l6.7-2.4z"/></svg>',
+    minus: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+    x: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    drag: '<svg viewBox="0 0 10 16" width="10" height="14" fill="currentColor"><circle cx="2.5" cy="3" r="1.3"/><circle cx="7.5" cy="3" r="1.3"/><circle cx="2.5" cy="8" r="1.3"/><circle cx="7.5" cy="8" r="1.3"/><circle cx="2.5" cy="13" r="1.3"/><circle cx="7.5" cy="13" r="1.3"/></svg>'
+  };
+
+  var SOURCE_LABEL = {
+    'live-iframe': 'runtime', 'live-fetch': 'runtime', 'live-xhr': 'runtime',
+    'iframe': 'iframe', 'embed': 'embed', 'media': 'media', 'link': 'link',
+    'script': 'script', 'json': 'json', 'attr': 'attr', 'storage': 'storage',
+    'network': 'network', 'global': 'global', 'dom': 'dom', 'srcdoc': 'srcdoc'
+  };
+
+  var SWITCHES = [
+    ['excludeAssets', 'Exclude static assets', 'Ignore images, fonts, css, video'],
+    ['strict', 'Strict mode', 'Only obvious game endpoints'],
+    ['boostSameDomain', 'Boost same-domain', "The page's own host wins ties"],
+    ['boostCdn', 'Boost CDNs & buckets', 'cdn. / storage / S3 / R2 / CloudFront'],
+    ['unwrapProxies', 'Unwrap proxies', 'Decode ?url=, base64, %3A%2F%2F'],
+    ['liveCapture', 'Live capture', 'Hook fetch, XHR and iframe.src']
+  ];
+
+  function log(msg) { try { console.debug('%c[GameExtractor] ' + msg, 'color:#0a84ff'); } catch (e) { } }
+
+  function toast(msg) {
+    var host = document.getElementById(ROOT_ID);
+    if (!host) return;
+    var old = host.querySelector('.gex-toast');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var t = document.createElement('div');
+    t.className = 'gex-toast';
+    t.textContent = msg;
+    host.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 1800);
+  }
+
+  function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
+
+  function highlightUrl(u) {
+    var safe = esc(u);
+    var at = safe.indexOf('//');
+    if (at < 0) return safe;
+    var slash = safe.indexOf('/', at + 2);
+    if (slash < 0) return '<b>' + safe + '</b>';
+    return '<b>' + safe.slice(0, slash) + '</b>' + safe.slice(slash);
+  }
+
+  function filtered() {
+    var q = state.query.trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (state.filter !== 'all' && it.source !== state.filter) continue;
+      if (q && (it.url + ' ' + it.source + ' ' + it.tags.join(' ')).toLowerCase().indexOf(q) === -1) continue;
+      out.push(it);
+    }
+    return out;
+  }
+
+  function rowHtml(it, i) {
+    var best = i === 0;
+    var pills = '';
+    if (best) pills += '<span class="gex-pill best">' + ICONS.spark + 'TOP MATCH</span>';
+    pills += '<span class="gex-pill src">' + esc(SOURCE_LABEL[it.source] || it.source) + '</span>';
+    for (var t = 0; t < it.tags.length && t < 3; t++) pills += '<span class="gex-pill dim">' + esc(it.tags[t]) + '</span>';
+    if (it.bytes) pills += '<span class="gex-pill dim">' + esc(fmtBytes(it.bytes)) + '</span>';
+    var u = esc(it.url);
+    return '<div class="gex-card' + (best ? ' top' : '') + '">' +
+      '<div class="gex-topline"><span class="gex-rank">' + (i + 1) + '</span>' + pills +
+      '<span style="margin-left:auto;font:600 9.5px ui-monospace,monospace;color:#6a6a70">' + it.score + '</span></div>' +
+      '<div class="gex-url">' + highlightUrl(it.url) + '</div>' +
+      '<div class="gex-actions">' +
+      '<button class="gex-mini go" data-act="open" data-url="' + esc(u) + '">' + ICONS.open + 'Open</button>' +
+      '<button class="gex-mini" data-act="sandbox" data-url="' + esc(u) + '">' + ICONS.box + 'Sandbox</button>' +
+      '<button class="gex-mini" data-act="copy" data-url="' + esc(u) + '">' + ICONS.copy + 'Copy</button>' +
+      '<button class="gex-mini" data-act="harvest" data-url="' + esc(u) + '">' + ICONS.code + 'Harvest</button>' +
+      '<button class="gex-mini" data-act="probe" data-url="' + esc(u) + '">' + ICONS.ruler + 'Size</button>' +
+      '</div>' +
+      '<div class="gex-bar"><i style="width:' + clamp(it.score, 3, 100) + '%"></i></div>' +
+      '</div>';
+  }
+
+  function listHtml() {
+    var list = filtered();
+    if (!list.length) {
+      var why = items.length
+        ? 'Nothing matches that filter — try clearing the search or picking another source.'
+        : 'No playable build detected yet.<br>Click “Play”, scroll, or open a level — captures stream in live from fetch, XHR, iframe.src and DOM mutations.';
+      return '<div class="gex-empty"><b>' + (items.length ? 'Filter active' : 'Scanning…') + '</b>' + why + '</div>';
+    }
+    var cap = state.showAll ? list.length : Math.min(list.length, 25);
+    var html = '';
+    for (var i = 0; i < cap; i++) html += rowHtml(list[i], i);
+    if (cap < list.length) html += '<button class="gex-more" data-act="more">Show ' + (list.length - cap) + ' more…</button>';
+    return html;
+  }
+
+  function tabsHtml() {
+    var counts = {};
+    for (var i = 0; i < items.length; i++) counts[items[i].source] = (counts[items[i].source] || 0) + 1;
+    var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 5);
+    var html = tab('all', 'All', items.length);
+    for (var k = 0; k < keys.length; k++) html += tab(keys[k], SOURCE_LABEL[keys[k]] || keys[k], counts[keys[k]]);
+    function tab(id, label, n) {
+      return '<button class="gex-tab' + (state.filter === id ? ' on' : '') + '" data-act="filter" data-filter="' + id + '">' + esc(label) + ' ' + n + '</button>';
+    }
+    return '<div class="gex-tabs">' + html + '</div>';
+  }
+
+  function settingsHtml() {
+    var rows = '';
+    for (var i = 0; i < SWITCHES.length; i++) {
+      var s = SWITCHES[i];
+      rows += '<div class="gex-opt"><span class="lbl">' + s[1] + '<span class="sub">' + s[2] + '</span></span>' +
+        '<div class="gex-sw' + (settings[s[0]] ? ' on' : '') + '" data-act="opt" data-key="' + s[0] + '" role="switch" aria-checked="' + !!settings[s[0]] + '"><i></i></div></div>';
+    }
+    return '<div class="gex-set"><div class="gex-panel"><h4>Filters</h4>' + rows +
+      '<div class="gex-opt"><span class="lbl">Minimum score<span class="sub">Lower = noisier</span></span>' +
+      '<div class="gex-num"><input type="range" min="-20" max="90" step="5" value="' + settings.minScore + '" data-act="range" aria-label="Minimum score">' +
+      '<output>' + settings.minScore + '</output></div></div>' +
+      '<div class="gex-row" style="margin-top:8px">' +
+      '<button class="gex-btn" style="flex:1;justify-content:center" data-act="rescan">' + ICONS.refresh + 'Re-scan now</button>' +
+      '<button class="gex-btn ghost" data-act="reset">Defaults</button>' +
+      '</div></div></div>';
+  }
+
+  function shellHtml() {
+    return '<div class="gex-head" data-handle>' +
+      '<span class="gex-grip">' + ICONS.drag + '</span>' +
+      '<span class="gex-mark">' + ICONS.logo + '</span>' +
+      '<span class="gex-title">Game Extractor</span>' +
+      '<span class="gex-v">v' + VERSION.split('.').slice(0, 2).join('.') + '</span>' +
+      '<span class="gex-live"><i></i><span data-status>idle</span></span>' +
+      '<span style="margin-left:auto;display:flex;gap:2px;align-items:center">' +
+      '<button class="gex-btn ghost" data-act="settings" title="Filters" style="padding:6px 8px">' + ICONS.gear + '</button>' +
+      '<button class="gex-btn ghost" data-act="min" title="Minimise (Esc)" style="padding:6px 8px">' + ICONS.minus + '</button>' +
+      '<button class="gex-btn ghost" data-act="close" title="Dismiss" style="padding:6px 8px">' + ICONS.x + '</button>' +
+      '</span></div>' +
+      '<div class="gex-tool">' +
+      '<div class="gex-row">' +
+      '<label class="gex-field">' + ICONS.search +
+      '<input type="text" data-query placeholder="Filter by url, source or tag…" spellcheck="false" aria-label="Filter results"></label>' +
+      '<button class="gex-btn" data-act="copyall" title="Copy every visible URL">' + ICONS.copy + 'Copy all</button>' +
+      '<button class="gex-btn" data-act="export" title="Export JSON report">' + ICONS.download + 'Export</button>' +
+      '</div>' +
+      '<div class="gex-row"><div data-tabs style="flex:1;min-width:0">' + tabsHtml() + '</div></div>' +
+      '</div>' +
+      '<div class="gex-meta"><span>host <b>' + esc(CURRENT_HOST || 'sandbox') + '</b></span>' +
+      '<span><b data-count>' + items.length + '</b> candidates · floor <b>' + settings.minScore + '</b></span></div>' +
+      '<div class="gex-body" data-body>' + listHtml() + '</div>' +
+      '<div data-settings data-open="0"></div>' +
+      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle · <kbd>Esc</kbd> minimise · <kbd>Enter</kbd> opens top match</span>' +
+      '<span style="margin-left:auto;font-size:10px;color:#6a6a70">authorised sites only</span></div>';
+  }
+
+  function render() {
+    var host = document.getElementById(ROOT_ID);
+    if (!host) return;
+    var list = filtered();
+    var countEl = host.querySelector('[data-count]');
+    if (countEl) countEl.textContent = String(list.length);
+    var body = host.querySelector('[data-body]');
+    if (body) body.innerHTML = listHtml();
+    var tabs = host.querySelector('[data-tabs]');
+    if (tabs) tabs.innerHTML = tabsHtml();
+    var st = host.querySelector('[data-status]');
+    if (st) st.textContent = status === 'scanning' ? 'scanning…' : (items.length ? 'watching' : 'idle');
+  }
+
+  var bubble = null;
+
+  function buildBubble() {
+    bubble = document.createElement('button');
+    bubble.id = 'gex-min';
+    bubble.type = 'button';
+    bubble.innerHTML = '<span class="dot"></span>Extractor <b style="color:#fff">' + items.length + '</b>';
+    bubble.title = 'Restore Game Extractor (Alt+G)';
+    bubble.addEventListener('click', function (e) { e.preventDefault(); setMinimised(false); });
+    document.documentElement.appendChild(bubble);
+    bubble.style.display = 'none';
+  }
+
+  function setMinimised(min) {
+    state.min = min;
+    var host = document.getElementById(ROOT_ID);
+    if (host) host.style.display = min ? 'none' : '';
+    if (!bubble) buildBubble();
+    bubble.style.display = min ? 'flex' : 'none';
+    if (min) bubble.innerHTML = '<span class="dot"></span>Extractor <b style="color:#fff">' + items.length + '</b>';
+  }
+
+  function restorePos(host) {
+    try {
+      var p = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+      if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+        var w = host.offsetWidth || 660;
+        host.style.left = clamp(p.x, -w + 90, Math.max(90, window.innerWidth - 90)) + 'px';
+        host.style.top = clamp(p.y, 4, Math.max(4, window.innerHeight - 60)) + 'px';
+        host.style.transform = 'none';
+        return true;
+      }
+    } catch (e) { }
+    return false;
+  }
+
+  function savePos(host) {
+    try {
+      localStorage.setItem(POS_KEY, JSON.stringify({
+        x: parseFloat(host.style.left) || host.offsetLeft,
+        y: parseFloat(host.style.top) || host.offsetTop
+      }));
+    } catch (e) { }
+  }
+
+  function mount() {
+    if (document.getElementById(ROOT_ID)) return;
+    var style = document.createElement('style');
+    style.id = 'gex-style';
+    style.textContent = CSS;
+    document.documentElement.appendChild(style);
+
+    var host = document.createElement('div');
+    host.id = ROOT_ID;
+    host.innerHTML = shellHtml();
+    document.documentElement.appendChild(host);
+
+    restorePos(host);
+    wire(host);
+    installObserver();
+    installHooks();
+    render();
+  }
+
+  function wire(host) {
+    var handle = host.querySelector('[data-handle]');
+    var dragging = false, dx = 0, dy = 0;
+
+    function down(e) {
+      if (e.target.closest && e.target.closest('button')) return;
+      dragging = true;
+      handle.classList.add('grabbing');
+      var r = host.getBoundingClientRect();
+      dx = (e.clientX || 0) - r.left;
+      dy = (e.clientY || 0) - r.top;
+      host.style.left = r.left + 'px';
+      host.style.top = r.top + 'px';
+      host.style.transform = 'none';
+      try { if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId); } catch (err) { }
+      e.preventDefault();
+    }
+    function move(e) {
+      if (!dragging) return;
+      var w = host.offsetWidth;
+      host.style.left = clamp((e.clientX || 0) - dx, -w + 90, window.innerWidth - 90) + 'px';
+      host.style.top = clamp((e.clientY || 0) - dy, 4, window.innerHeight - 44) + 'px';
+    }
+    function up() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('grabbing');
+      savePos(host);
+    }
+    handle.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+
+    host.addEventListener('click', onClick);
+    host.addEventListener('input', onInput);
+    host.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.getAttribute && e.target.hasAttribute('data-query')) {
+        var list = filtered();
+        if (list.length) openUrl(list[0].url);
+      }
+    });
+  }
+
+  function copyText(text, msg) {
+    var done = function () { toast(msg || 'Copied'); };
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+        return;
+      }
+    } catch (e) { }
+    fallbackCopy(text, done);
+  }
+
+  function fallbackCopy(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+      document.documentElement.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.documentElement.removeChild(ta);
+      if (ok) done(); else toast('Copy blocked by browser');
+    } catch (e) { toast('Copy blocked by browser'); }
+  }
+
+  function openUrl(u) {
+    var w = null;
+    try { w = window.open(u, '_blank'); } catch (e) { }
+    try { if (w) w.opener = null; } catch (e) { }
+    if (!w) { try { location.href = u; } catch (e) { } }
+  }
+
+  function openSandbox(u) {
+    var w = null;
+    try { w = window.open('about:blank', '_blank'); } catch (e) { }
+    if (!w) { toast('Popup blocked — allow popups'); return; }
+    try { w.opener = null; } catch (e) { }
+    var doc = w.document;
+    doc.open();
+    doc.write('<!doctype html><html style="height:100%"><head><meta charset="utf-8"><title>Sandbox · ' + esc(hostOf(u)) + '</title>' +
+      '<style>html,body{margin:0;height:100%;background:#08080a;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}' +
+      '#b{position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#0a84ff,#bf5af2);z-index:9}</style></head><body>' +
+      '<div id="b"></div><iframe src="' + esc(u) + '" allow="autoplay; fullscreen; gamepad *; xr-spatial-tracking; accelerometer; gyroscope; clipboard-write" allowfullscreen></iframe></body></html>');
+    doc.close();
+    toast('Sandbox opened');
+  }
+
+  var PROXIES = [
+    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); },
+    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://api.allorigins.win/get?url=' + encodeURIComponent(u); }
+  ];
+
+  function fetchThroughProxy(u) {
+    var attempt = 0;
+    function run() {
+      if (attempt >= PROXIES.length) return Promise.reject(new Error('no proxy worked'));
+      var target = PROXIES[attempt++](u);
+      return fetch(target, { redirect: 'follow' }).then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.text();
+      }).then(function (body) {
+        if (body && body.charAt(0) === '{' && body.indexOf('"contents"') > -1) {
+          try {
+            var parsed = JSON.parse(body);
+            if (parsed && typeof parsed.contents === 'string') return parsed.contents;
+          } catch (e) { }
+        }
+        return body;
+      }).catch(function () { return run(); });
+    }
+    return Promise.race([
+      run(),
+      new Promise(function (_res, rej) { setTimeout(function () { rej(new Error('timeout')); }, 15000); })
+    ]);
+  }
+
+  function stripAds(html) {
+    return String(html)
+      .replace(/<script\b[^>]*\bsrc\s*=\s*["'][^"']*(?:googletagmanager|google-analytics|googlesyndication|doubleclick|adservice|hotjar|mixpanel|sentry|analytics|telemetry|pubmatic|criteo|taboola|onesignal)[^"']*["'][^>]*>\s*<\/script>/gi, '')
+      .replace(/<(?:div|aside|section|a|span)\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:ad-?banner|advert|ads-?wrap|promo|watermark|cookie|consent|gdpr|newsletter|subscribe|social-?bar|discord-?banner|site-?notice)[^"']*["'][^>]*>[\s\S]{0,4000}?<\/(?:div|aside|section|a|span)>/gi, '')
+      .replace(/<[^>]+>\s*(?:hey\s*[!,.]?\s*)?check\s+out[^<]{0,120}<\/(?:a|div|p|span)>/gi, '')
+      .replace(/<[^>]+>\s*join\s+(?:our\s+)?(?:the\s+)?discord[^<]{0,80}<\/(?:a|div|p|span)>/gi, '')
+      .replace(/<[^>]+>\s*play\s+more\s+free\s+games[^<]{0,80}<\/(?:a|div|p|span)>/gi, '');
+  }
+
+  function harvest(u, btn) {
+    var label = btn.innerHTML;
+    btn.innerHTML = 'Harvesting…';
+    fetchThroughProxy(u).then(function (body) {
+      if (!body || body.length < 60) throw new Error('empty');
+      var html = body;
+      if (!/<base\s/i.test(html)) {
+        html = /<head[^>]*>/i.test(html)
+          ? html.replace(/<head([^>]*)>/i, '<head$1><base href="' + esc(u) + '">')
+          : '<base href="' + esc(u) + '">' + html;
+      }
+      if (!/<meta\s+charset/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1><meta charset="utf-8">');
+      html = stripAds(html);
+      html = html.replace(/<\/head>/i, '<style>html,body{margin:0;min-height:100%}canvas{display:block;max-width:100%}</style></head>');
+      download(html, 'game-' + (hostOf(u) || 'build') + '.html', 'text/html;charset=utf-8');
+      btn.innerHTML = ICONS.code + 'Saved ✓';
+      toast('Standalone HTML saved');
+    }).catch(function () {
+      var shell = '<!doctype html><html style="height:100%"><head><meta charset="utf-8"><title>' + esc(hostOf(u) || 'Game') + '</title>' +
+        '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style></head><body>' +
+        '<iframe src="' + esc(u) + '" allow="autoplay; fullscreen; gamepad *" allowfullscreen></iframe></body></html>';
+      download(shell, 'game-' + (hostOf(u) || 'build') + '-shell.html', 'text/html;charset=utf-8');
+      btn.innerHTML = ICONS.code + 'Shell ✓';
+      toast('Source blocked — saved an iframe shell');
+    }).then(function () {
+      setTimeout(function () { btn.innerHTML = label; }, 1600);
+    });
+  }
+
+  function download(text, name, mime) {
+    try {
+      var blob = new Blob([text], { type: mime || 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      document.documentElement.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 4000);
+    } catch (e) { toast('Download blocked'); }
+  }
+
+  function onClick(e) {
+    var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!btn) return;
+    var act = btn.getAttribute('data-act');
+    var url = btn.getAttribute('data-url');
+    var host = document.getElementById(ROOT_ID);
+    if (!host) return;
+
+    if (act === 'close') { teardown(); return; }
+    if (act === 'min') { setMinimised(true); return; }
+    if (act === 'settings') {
+      var wrap = host.querySelector('[data-settings]');
+      if (!wrap) return;
+      var opening = wrap.getAttribute('data-open') !== '1';
+      wrap.setAttribute('data-open', opening ? '1' : '0');
+      wrap.innerHTML = opening ? settingsHtml() : '';
+      return;
+    }
+    if (act === 'opt') {
+      var key = btn.getAttribute('data-key');
+      settings[key] = !settings[key];
+      btn.classList.toggle('on', !!settings[key]);
+      btn.setAttribute('aria-checked', String(!!settings[key]));
+      store();
+      items = []; seen = {};
+      scanAll('filters');
+      return;
+    }
+    if (act === 'rescan') { items = []; seen = {}; scanAll('manual'); toast('Re-scanned'); return; }
+    if (act === 'reset') {
+      settings = clone(DEFAULTS); store();
+      var wrap2 = host.querySelector('[data-settings]');
+      if (wrap2) wrap2.innerHTML = settingsHtml();
+      items = []; seen = {};
+      scanAll('reset');
+      return;
+    }
+    if (act === 'filter') {
+      state.filter = btn.getAttribute('data-filter') || 'all';
+      state.showAll = false;
+      render();
+      return;
+    }
+    if (act === 'more') { state.showAll = true; render(); return; }
+    if (act === 'copyall') {
+      var list = filtered();
+      if (!list.length) { toast('Nothing to copy'); return; }
+      copyText(list.map(function (i) { return i.url; }).join('\n'), list.length + ' URLs copied');
+      return;
+    }
+    if (act === 'export') {
+      if (!items.length) { toast('Nothing to export'); return; }
+      download(JSON.stringify({
+        generator: 'Game Extractor ' + VERSION,
+        host: CURRENT_HOST,
+        page: location.href,
+        capturedAt: new Date().toISOString(),
+        settings: settings,
+        results: items.map(function (i) {
+          return { url: i.url, source: i.source, score: i.score, tags: i.tags, hits: i.hits, bytes: i.bytes || undefined };
+        })
+      }, null, 2), (CORE || 'page') + '-extracted.json', 'application/json');
+      toast('JSON exported');
+      return;
+    }
+    if (act === 'open') { openUrl(url); return; }
+    if (act === 'sandbox') { openSandbox(url); return; }
+    if (act === 'probe') {
+      var found = null;
+      for (var i = 0; i < items.length; i++) if (items[i].url === url) found = items[i];
+      if (!found) { toast('Not found'); return; }
+      btn.innerHTML = ICONS.ruler + '…';
+      probeSize(found);
+      return;
+    }
+    if (act === 'harvest') { harvest(url, btn); return; }
+  }
+
+  function onInput(e) {
+    var t = e.target;
+    if (!t || !t.getAttribute) return;
+    if (t.hasAttribute('data-query')) {
+      state.query = t.value;
+      render();
+      return;
+    }
+    if (t.getAttribute('data-act') === 'range') {
+      settings.minScore = clamp(parseInt(t.value, 10) || 0, -20, 90);
+      var out = t.parentNode.querySelector('output');
+      if (out) out.textContent = String(settings.minScore);
+      clearTimeout(onInput._t);
+      onInput._t = setTimeout(function () { reevaluate(); store(); }, 260);
+    }
+  }
+
+  function reevaluate() {
+    var old = items;
+    items = []; seen = {};
+    for (var i = 0; i < old.length; i++) {
+      var v = scoreCandidate(old[i].url, old[i].source, old[i].raw);
+      if (!v || v.score < settings.minScore) continue;
+      items.push({
+        id: old[i].id, url: old[i].url, raw: old[i].raw, source: old[i].source,
+        score: v.score, tags: v.tags, hits: old[i].hits, bytes: old[i].bytes,
+        mime: old[i].mime, probing: old[i].probing
+      });
+    }
+    items.sort(function (a, b) { return b.score - a.score || b.id - a.id; });
+    reindex();
+    dirty = true;
+    scheduleRender();
+  }
+
+  var renderTimer = null;
+
+  var interactingUntil = 0;
+
+  function scheduleRender() {
+    if (renderTimer) return;
+    renderTimer = setTimeout(function () {
+      renderTimer = null;
+      if (Date.now() < interactingUntil) { scheduleRender(); return; }
+      render();
+      if (bubble && state.min) bubble.innerHTML = '<span class="dot"></span>Extractor <b style="color:#fff">' + items.length + '</b>';
+    }, 120);
+  }
+
+  function teardown() {
+    try { if (mo) mo.disconnect(); } catch (e) { }
+    mo = null;
+    for (var i = 0; i < restoreHooks.length; i++) { try { restoreHooks[i](); } catch (e) { } }
+    restoreHooks = [];
+    var host = document.getElementById(ROOT_ID);
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+    var st = document.getElementById('gex-style');
+    if (st && st.parentNode) st.parentNode.removeChild(st);
+    if (bubble && bubble.parentNode) bubble.parentNode.removeChild(bubble);
+    bubble = null;
+    window.__gex = null;
+    window.removeEventListener('keydown', onKey, true);
+  }
+
+  function toggle() {
+    var host = document.getElementById(ROOT_ID);
+    if (!host) { boot(); return; }
+    if (state.min) setMinimised(false); else setMinimised(true);
+  }
+
+  window.__gex = {
+    version: VERSION,
+    toggle: toggle,
+    show: function () { setMinimised(false); },
+    rescan: function () { scanAll('api'); },
+    urls: function () { return items.map(function (i) { return i.url; }); },
+    settings: settings,
+    teardown: teardown
+  };
+
+  function onKey(e) {
+    if (e.altKey && (e.key === 'g' || e.key === 'G')) { e.preventDefault(); toggle(); return; }
+    if (e.key === 'Escape' && !state.min && document.getElementById(ROOT_ID)) setMinimised(true);
+  }
+
+  var started = false;
+
+  function boot() {
+    if (started) return;
+    started = true;
+    mount();
+    scanAll('initial');
+    [1500, 4000, 10000, 20000].forEach(function (ms) { setTimeout(function () { scanAll('late'); }, ms); });
+  }
+
+  window.addEventListener('keydown', onKey, true);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+    setTimeout(boot, 3000);
+  } else {
+    boot();
+  }
 })();
