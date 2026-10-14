@@ -1,0 +1,50 @@
+name: Minify extractor
+
+# Rebuilds extractor.min.js every time extractor.js changes on main.
+# The bookmarklet loader pulls the .min file, so pushes ship instantly.
+on:
+  push:
+    branches: [main]
+    paths:
+      - extractor.js
+      - .github/workflows/minify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: minify-extractor
+  cancel-in-progress: true
+
+jobs:
+  minify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Minify with terser
+        run: npx -y terser extractor.js --compress --mangle --comments false --output extractor.min.js
+
+      - name: Report sizes
+        run: |
+          echo "### Minified build" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh extractor.js extractor.min.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit minified file
+        run: |
+          if git diff --quiet -- extractor.min.js; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extractor.min.js
+          git commit -m "chore: rebuild extractor.min.js"
+          git push
