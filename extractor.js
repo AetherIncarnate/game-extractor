@@ -1,11 +1,11 @@
 /*!
- * Game Extractor v3.2 — surface the playable build behind a game page.
+ * Game Extractor v3.3 — surface the playable build behind a game page.
  * Owned / authorised sites only. No dependencies.
  */
 (function () {
   'use strict';
 
-  var VERSION = '3.2.0';
+  var VERSION = '3.3.0';
   var ROOT_ID = 'gex-root';
 
   if (window.__gex) {
@@ -322,7 +322,7 @@
     var tech = techOf(full, ext, tags);
     if (tech) { score += 10; tags.push(tech); parts.push([tech + ' engine', 10]); }
 
-    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'finder': 20, 'json': 18, 'network': 16, 'script': 12, 'storage': 10, 'attr': 8, 'link': 4 };
+    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'finder': 20, 'json': 18, 'network': 16, 'ws': 15, 'script': 12, 'pwa': 12, 'storage': 10, 'attr': 8, 'link': 4 };
     if (evW[source]) { score += evW[source]; tags.push(source.indexOf('live-') === 0 ? 'runtime' : source); parts.push(['via ' + source, evW[source]]); }
 
     // find-by-name: the build URL that actually carries the game's name
@@ -412,7 +412,8 @@
       tech: verdict.tech,
       ext: verdict.ext,
       hits: 1,
-      bytes: 0
+      bytes: 0,
+      born: Date.now()
     });
     stats.kept = items.length;
     items.sort(function (a, b) { return b.score - a.score || b.id - a.id; });
@@ -428,13 +429,21 @@
   function probeSize(item) {
     if (!/^https?:/.test(item.url) || item.probing) return;
     item.probing = true;
+    var t0 = Date.now();
     fetch(item.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
       item.bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
       item.mime = r.headers.get('content-type') || '';
       item.ok = r.ok;
+      item.ms = Date.now() - t0;
       item.probing = false;
       dirty = true; scheduleRender();
-    }).catch(function () { item.probing = false; item.mime = 'unreachable'; });
+    }).catch(function () {
+      item.probing = false;
+      item.ms = Date.now() - t0;
+      item.mime = 'unreachable';
+      item.ok = false;
+      dirty = true; scheduleRender();
+    });
   }
 
   function scanDocument(doc, base) {
@@ -630,6 +639,12 @@
 
   function scanMeta() {
     try {
+      var man = document.querySelector('link[rel="manifest"]');
+      if (man && man.href) addCandidate(man.href, 'pwa');
+      var icons = document.querySelectorAll('link[rel~="apple-touch-icon"], link[rel~="icon"][sizes]');
+      for (var ic = 0; ic < icons.length && ic < 4; ic++) addCandidate(icons[ic].getAttribute('href'), 'pwa');
+    } catch (e) { }
+    try {
       var nodes = document.querySelectorAll('meta[content], base[href]');
       for (var i = 0; i < nodes.length; i++) {
         var v = nodes[i].getAttribute('content') || nodes[i].getAttribute('href') || '';
@@ -744,6 +759,22 @@
     } catch (e) { /* frozen */ }
 
     try {
+      var WS = window.WebSocket;
+      if (typeof WS === 'function') {
+        window.WebSocket = function (url, protocols) {
+          try { if (url) addCandidate(String(url), 'ws'); } catch (e) { }
+          return protocols === undefined ? new WS(url) : new WS(url, protocols);
+        };
+        window.WebSocket.prototype = WS.prototype;
+        window.WebSocket.CONNECTING = WS.CONNECTING;
+        window.WebSocket.OPEN = WS.OPEN;
+        window.WebSocket.CLOSING = WS.CLOSING;
+        window.WebSocket.CLOSED = WS.CLOSED;
+        restoreHooks.push(function () { window.WebSocket = WS; });
+      }
+    } catch (e) { /* frozen */ }
+
+    try {
       var po = new PerformanceObserver(function (list) {
         var entries = list.getEntries();
         for (var i = 0; i < entries.length; i++) {
@@ -809,7 +840,8 @@
   var state = {
     min: false, query: '', filter: 'all', showAll: false, favOnly: false,
     expanded: 0, theater: null,
-    findOpen: false, findInput: '', findName: '', findVariants: [], findMsg: null
+    findOpen: false, findInput: '', findName: '', findVariants: [], findMsg: null,
+    trace: null
   };
   var POS_KEY = 'gex:pos';
 
@@ -953,6 +985,20 @@
     '.gex-log{margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:9px;}',
     '.gex-log .t{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6a6a70;margin-bottom:4px;}',
     '.gex-log .l{font:10px/1.75 ui-monospace,Menlo,monospace;color:#7c7c81;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+    '@keyframes gexFresh{0%{box-shadow:0 0 0 0 rgba(10,132,255,.5)}100%{box-shadow:0 0 0 12px rgba(10,132,255,0)}}',
+    '.gex-card.fresh{animation:gexFresh 1s ease-out 2;}',
+    '.gex-trace{margin-top:10px;border-top:1px solid rgba(255,255,255,.07);padding-top:10px;}',
+    '.gex-trace-h{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#e8e8ed;margin-bottom:7px;}',
+    '.gex-trace-h svg{color:#84c1ff}',
+    '.gex-trace-sub{font-size:10.5px;color:#7c7c81;padding:2px;}',
+    '.gex-tf{display:flex;align-items:center;gap:8px;padding:3.5px 2px;border-top:1px solid rgba(255,255,255,.045);font-size:10.5px;}',
+    '.gex-tf:first-of-type{border-top:0}',
+    '.gex-tf-role{flex:none;width:52px;text-align:center;font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:99px;padding:2px 0;}',
+    '.gex-tf-role.r-core{background:rgba(10,132,255,.15);color:#84c1ff;border:1px solid rgba(10,132,255,.25)}',
+    '.gex-tf-role.r-config{background:rgba(191,90,242,.14);color:#d7a8ff;border:1px solid rgba(191,90,242,.28)}',
+    '.gex-tf-role.r-support{background:rgba(255,255,255,.06);color:#a9a9b0;border:1px solid rgba(255,255,255,.08)}',
+    '.gex-tf-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9c9d4;}',
+    '.gex-tf-size{flex:none;font-family:ui-monospace,Menlo,monospace;color:#7c7c81;font-size:10px;}',
     '.gex-lights{display:flex;gap:7px;align-items:center;flex:none;}',
     '.gex-light{width:11px;height:11px;border-radius:50%;position:relative;display:grid;place-items:center;box-shadow:inset 0 0 2px rgba(0,0,0,.25);}',
     '.gex-light.r{background:#ff5f57;}.gex-light.y{background:#febc2e;}.gex-light.g{background:#28c840;}',
@@ -1015,14 +1061,16 @@
     play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
     back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
     target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>',
-    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>'
+    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3.5 12.5L12 17l8.5-4.5"/><path d="M3.5 16.5L12 21l8.5-4.5"/></svg>'
   };
 
   var SOURCE_LABEL = {
     'live-iframe': 'runtime', 'live-fetch': 'runtime', 'live-xhr': 'runtime',
     'iframe': 'iframe', 'embed': 'embed', 'media': 'media', 'link': 'link',
     'script': 'script', 'json': 'json', 'attr': 'attr', 'storage': 'storage',
-    'network': 'network', 'global': 'global', 'dom': 'dom', 'srcdoc': 'srcdoc'
+    'network': 'network', 'global': 'global', 'dom': 'dom', 'srcdoc': 'srcdoc',
+    'deep': 'deep', 'finder': 'finder', 'ws': 'socket', 'pwa': 'pwa'
   };
 
   var SWITCHES = [
@@ -1241,6 +1289,176 @@
       : 'No source matched “' + nm + '” — try the exact slug');
   }
 
+  /* ---------------- trace: the full package a build needs ---------------- */
+  var traceSeq = 0;
+
+  function traceBuild(url) {
+    var seq = ++traceSeq;
+    state.trace = { url: url, status: 'loading', files: [], total: 0 };
+    render();
+
+    function push(files, raw, role) {
+      var abs = resolveUrl(raw, url);
+      if (!abs || /^data:/i.test(abs)) return;
+      abs = abs.split('#')[0];
+      var k = keyOf(abs);
+      for (var i = 0; i < files.length; i++) if (files[i].k === k) return;
+      files.push({
+        k: k, url: abs, role: role,
+        ext: (abs.match(/\.[a-z0-9]{1,9}$/i) || [''])[0].toLowerCase(),
+        bytes: 0, ms: 0
+      });
+    }
+
+    fetchThroughProxy(url).then(function (body) {
+      if (state.trace && state.trace.url !== url) return; // superseded
+      if (!body) throw new Error('empty');
+      var files = [];
+
+      // Unity build config (Build/game.json)
+      var trimmed = body.trim();
+      if (/^\s*\{/.test(trimmed) && /dataUrl|frameworkUrl|codeUrl/.test(trimmed)) {
+        try {
+          var cfg = JSON.parse(trimmed);
+          ['dataUrl', 'frameworkUrl', 'codeUrl', 'wasmBinaryUrl', 'loaderUrl', 'serverUrl', 'symbolsUrl']
+            .forEach(function (f) { if (typeof cfg[f] === 'string') push(files, cfg[f], 'core'); });
+        } catch (e) { }
+      }
+
+      var m;
+      // Unity loader calls inside html/js
+      var reU = /UnityLoader\.(?:instantiate|Build)\s*\([^,]+,\s*["']([^"']+)["']/g;
+      while ((m = reU.exec(body))) push(files, m[1], 'config');
+      var reC = /createUnityInstance\s*\([^,]+,\s*\{([^}]{0,600})\}/g;
+      while ((m = reC.exec(body))) {
+        var kv = /(\w+Url|dataUrl|frameworkUrl|codeUrl)\s*:\s*["']([^"']+)["']/g, mm;
+        while ((mm = kv.exec(m[1]))) push(files, mm[2], 'core');
+      }
+      // Godot
+      var reG = /(?:startGame|start|init|preload|Engine\()\s*\(?[^"']*?["']([^"']+?\.(?:pck|zip|wasm))["']/gi;
+      while ((m = reG.exec(body))) push(files, m[1], 'core');
+      // Construct / PlayCanvas
+      var reP = /["'](project\.json|files\.json|__game\.json|config\.json)["']/gi;
+      while ((m = reP.exec(body))) push(files, m[1], 'config');
+
+      // tag-swept game assets
+      var tagRe = /(?:src|href|data)\s*=\s*["']([^"']{3,220})["']/gi;
+      while ((m = tagRe.exec(body))) {
+        if (/\.(?:wasm|data|pck|unityweb|framework\.js|loader\.js|bundle|assets|swf|json|html?|br|gz)(?:[?#]|$)/i.test(m[1])) {
+          push(files, m[1], /\.(?:wasm|data|pck|unityweb|swf|br|gz)$/i.test(m[1]) ? 'core' : 'support');
+        }
+      }
+      // absolute deep links
+      var absRe = /https?:\/\/[^\s"'`<>()\\]+\.(?:wasm|data|pck|unityweb|framework\.js|swf|zip|br|gz)(?:[?#][^\s"'<>]*)?/gi;
+      while ((m = absRe.exec(body))) push(files, m[0], 'core');
+
+      if (seq !== traceSeq || (state.trace && state.trace.url !== url)) return;
+      state.trace = { url: url, status: 'done', files: files, total: files.length };
+      log('trace "' + hostOf(url) + '" → ' + files.length + ' files');
+      probeTraceFiles(files, url);
+      render();
+    }).catch(function () {
+      if (state.trace && state.trace.url === url) {
+        state.trace.status = 'fail';
+        render();
+      }
+    });
+  }
+
+  function probeTraceFiles(files, url) {
+    var idx = 0, active = 0;
+    function next() {
+      while (active < 6 && idx < files.length) {
+        (function (f) {
+          active++; idx++;
+          var t0 = Date.now();
+          fetch(f.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
+            f.bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
+            f.ms = Date.now() - t0;
+          }).catch(function () { }).then(function () {
+            active--;
+            if (state.trace && state.trace.url === url) { dirty = true; scheduleRender(); }
+            next();
+          });
+        })(files[idx]);
+      }
+    }
+    next();
+  }
+
+  function traceHtml() {
+    var tr = state.trace;
+    if (!tr) return '';
+    if (tr.status === 'loading') {
+      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' Tracing package… <span class="gex-spin" style="display:inline-block">' + ICONS.refresh + '</span></div>' +
+        '<div class="gex-trace-sub">fetching the build and reading its loader</div></div>';
+    }
+    if (tr.status === 'fail') {
+      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' Trace failed</div>' +
+        '<div class="gex-trace-sub">the build blocked the proxy — try Harvest instead</div>' +
+        '<button class="gex-mini" data-act="trace-close" style="margin-top:8px">Dismiss</button></div>';
+    }
+    if (!tr.files.length) {
+      return '<div class="gex-trace"><div class="gex-trace-h">' + ICONS.layers + ' No packaged assets</div>' +
+        '<div class="gex-trace-sub">this build loads everything inline — nothing extra to grab</div></div>';
+    }
+    var bytes = 0;
+    for (var i = 0; i < tr.files.length; i++) bytes += tr.files[i].bytes || 0;
+    var rowsHtml = '';
+    var shown = tr.files.slice(0, 18);
+    for (var j = 0; j < shown.length; j++) {
+      var f = shown[j];
+      var path = f.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+      rowsHtml += '<div class="gex-tf">' +
+        '<span class="gex-tf-role r-' + f.role + '">' + f.role + '</span>' +
+        '<span class="gex-tf-path" title="' + esc(f.url) + '">' + esc(decodeURIComponent(path)) + '</span>' +
+        '<span class="gex-tf-size">' + (f.bytes ? esc(fmtBytes(f.bytes)) + (f.ms ? ' · ' + f.ms + 'ms' : '') : (f.ms ? f.ms + 'ms' : '…')) + '</span>' +
+        '</div>';
+    }
+    if (tr.files.length > shown.length) rowsHtml += '<div class="gex-trace-sub" style="padding:4px 2px">+' + (tr.files.length - shown.length) + ' more</div>';
+    return '<div class="gex-trace">' +
+      '<div class="gex-trace-h">' + ICONS.layers + ' Package · ' + tr.files.length + ' files' + (bytes ? ' · ~' + esc(fmtBytes(bytes)) : '') + '</div>' +
+      rowsHtml +
+      '<div class="gex-actions" style="margin-top:9px">' +
+      '<button class="gex-mini go" data-act="trace-curl">' + ICONS.term + 'curl script</button>' +
+      '<button class="gex-mini" data-act="trace-manifest">' + ICONS.download + 'manifest.json</button>' +
+      '<button class="gex-mini" data-act="trace-sh">' + ICONS.download + 'download.sh</button>' +
+      '<button class="gex-mini" data-act="trace-close">' + ICONS.x + 'Close</button>' +
+      '</div></div>';
+  }
+
+  function traceCurl() {
+    if (!state.trace || !state.trace.files.length) return;
+    var lines = state.trace.files.map(function (f) {
+      var name = decodeURIComponent((f.url.split('/').pop() || 'file').split('?')[0]);
+      return "curl -L --create-dirs -o '" + name.replace(/'/g, '') + "' '" + f.url + "'";
+    });
+    copyText(lines.join('\n'), lines.length + ' curl lines copied');
+  }
+
+  function traceDownload(asShell) {
+    if (!state.trace || !state.trace.files.length) return;
+    var files = state.trace.files;
+    if (asShell) {
+      var sh = '#!/bin/sh\n# Game Extractor trace · ' + state.trace.url + '\nset -e\nmkdir -p gex-package && cd gex-package\n' +
+        files.map(function (f) {
+          var name = decodeURIComponent((f.url.split('/').pop() || 'file').split('?')[0]).replace(/'/g, '');
+          return "curl -L -o '" + name + "' '" + f.url + "'";
+        }).join('\n') + '\necho "done — ' + files.length + ' files"\n';
+      download(sh, 'gex-download.sh', 'text/x-shellscript');
+      toast('download.sh saved');
+    } else {
+      download(JSON.stringify({
+        generator: 'Game Extractor ' + VERSION,
+        build: state.trace.url,
+        tracedAt: new Date().toISOString(),
+        totalBytes: files.reduce(function (s, f) { return s + (f.bytes || 0); }, 0),
+        files: files.map(function (f) { return { url: f.url, role: f.role, ext: f.ext, bytes: f.bytes || undefined }; })
+      }, null, 2), 'gex-package-manifest.json', 'application/json');
+      toast('manifest.json saved');
+    }
+  }
+
   function detailHtml(it) {
     var parts = it.parts || [];
     var max = 1;
@@ -1259,14 +1477,17 @@
       '<div class="gex-kv"><span>extension</span><b>' + esc(it.ext || '(none)') + '</b></div>' +
       '<div class="gex-kv"><span>engine</span><b>' + esc(it.tech || 'unknown') + '</b></div>' +
       '<div class="gex-kv"><span>seen</span><b>' + it.hits + '× · ' + esc(it.source) + '</b></div>' +
-      (it.mime ? '<div class="gex-kv"><span>server says</span><b>' + esc(it.mime) + (it.bytes ? ' · ' + esc(fmtBytes(it.bytes)) : '') + '</b></div>' : '') +
+      (it.mime ? '<div class="gex-kv"><span>server says</span><b>' + esc(it.mime) + (it.bytes ? ' · ' + esc(fmtBytes(it.bytes)) : '') + (typeof it.ms === 'number' ? ' · ' + it.ms + 'ms' : '') + '</b></div>' : '') +
       (it.raw && it.raw !== it.url ? '<div class="gex-kv"><span>found as</span><b>' + esc(it.raw.slice(0, 120)) + '</b></div>' : '') +
       '<div class="gex-parts">' + rows + '</div>' +
       '<div class="gex-actions">' +
       '<button class="gex-mini" data-act="copy-md" data-url="' + esc(it.url) + '">' + ICONS.copy + 'Markdown</button>' +
       '<button class="gex-mini" data-act="copy-curl" data-url="' + esc(it.url) + '">' + ICONS.code + 'curl</button>' +
       '<button class="gex-mini" data-act="copy-embed" data-url="' + esc(it.url) + '">' + ICONS.box + 'Embed</button>' +
-      '</div></div>';
+      '<button class="gex-mini' + (state.trace && state.trace.url === it.url ? ' on' : '') + '" data-act="trace" data-url="' + esc(it.url) + '" title="List every file this build loads">' + ICONS.layers + 'Trace package</button>' +
+      '</div>' +
+      (state.trace && state.trace.url === it.url ? traceHtml() : '') +
+      '</div>';
   }
 
   function rowHtml(it, i) {
@@ -1287,7 +1508,8 @@
     var h = hostOf(u);
     var fav = isFav(u);
     var open = state.expanded === it.id;
-    return '<div class="gex-card' + (best ? ' top' : '') + '">' +
+    var fresh = typeof it.born === 'number' && Date.now() - it.born < 2600;
+    return '<div class="gex-card' + (best ? ' top' : '') + (fresh ? ' fresh' : '') + '">' +
       '<div class="gex-host"><img src="' + faviconFor(h) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
       '<span>' + esc(h || 'local file') + '</span><em>' + esc(it.ext || (it.tech || 'page')) + ' · ' + it.hits + '×</em>' +
       '<button class="gex-fav' + (fav ? ' on' : '') + '" data-act="fav" data-url="' + esc(u) + '" title="Pin to favorites">' + (fav ? ICONS.starOn : ICONS.star) + '</button></div>' +
@@ -1899,6 +2121,21 @@
       state.expanded = state.expanded === id ? 0 : id;
       render(); return;
     }
+
+    if (act === 'trace') {
+      if (state.expanded !== (items.filter(function (x) { return x.url === url; })[0] || {}).id) {
+        // make sure the expanded panel for this row is open
+        var hit = null;
+        for (var ti = 0; ti < items.length; ti++) if (items[ti].url === url) hit = items[ti];
+        if (hit) state.expanded = hit.id;
+      }
+      traceBuild(url);
+      return;
+    }
+    if (act === 'trace-curl') { traceCurl(); return; }
+    if (act === 'trace-manifest') { traceDownload(false); return; }
+    if (act === 'trace-sh') { traceDownload(true); return; }
+    if (act === 'trace-close') { state.trace = null; render(); return; }
 
     if (act === 'copy') {
       copyText(url, 'URL copied');
