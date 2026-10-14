@@ -1,6 +1,6 @@
 {
   "version": "3.3.0",
-  "builtAt": "2026-10-14T13:42:09Z",
-  "commit": "57fb717b2fbcad5999ae828b08bc405812915bb5",
-  "bytes": { "raw": 138483, "min": 94718, "gzip": 30599 }
+  "builtAt": "2026-10-14T13:43:11Z",
+  "commit": "892104d3a6c823abb09db56729f963c105428972",
+  "bytes": { "raw": 124414, "min": 85446, "gzip": 27509 }
 }
