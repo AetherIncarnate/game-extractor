@@ -1,50 +1,72 @@
-name: Minify extractor
+name: Build extractor
 
-# Rebuilds extractor.min.js every time extractor.js changes on main.
-# The bookmarklet loader pulls the .min file, so pushes ship instantly.
 on:
   push:
     branches: [main]
     paths:
-      - extractor.js
-      - .github/workflows/minify.yml
+      - 'extractor.js'
+      - '.github/workflows/build-extractor.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: minify-extractor
+  group: build-extractor
   cancel-in-progress: true
 
 jobs:
   minify:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Minify with terser
-        run: npx -y terser extractor.js --compress --mangle --comments false --output extractor.min.js
+      - name: Syntax check
+        run: node --check extractor.js
 
-      - name: Report sizes
+      - name: Minify -> extractor.min.js
         run: |
-          echo "### Minified build" >> "$GITHUB_STEP_SUMMARY"
-          ls -lh extractor.js extractor.min.js >> "$GITHUB_STEP_SUMMARY"
+          npx --yes terser@5.36.0 extractor.js \
+            --compress passes=3,drop_debugger=true \
+            --mangle \
+            --format "comments=false,preamble='/*! Game Extractor — built from extractor.js — MIT */'" \
+            --output extractor.min.js
+          node --check extractor.min.js
 
-      - name: Commit minified file
+      - name: Verify the bundle still boots
         run: |
-          if git diff --quiet -- extractor.min.js; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add extractor.min.js
-          git commit -m "chore: rebuild extractor.min.js"
+          node -e "
+            const s = require('fs').readFileSync('extractor.min.js','utf8');
+            if (!s.includes('__gex')) { console.error('missing __gex entrypoint'); process.exit(1); }
+            if (s.length < 5000) { console.error('suspiciously small'); process.exit(1); }
+            console.log('ok -', s.length, 'bytes');
+          "
+
+      - name: Write build info
+        run: |
+          RAW=$(wc -c < extractor.js)
+          MIN=$(wc -c < extractor.min.js)
+          GZ=$(gzip -c extractor.min.js | wc -c)
+          printf '{\n  "version": "%s",\n  "builtAt": "%s",\n  "commit": "%s",\n  "bytes": { "raw": %s, "min": %s, "gzip": %s }\n}\n' \
+            "$(grep -o "VERSION = '[^']*'" extractor.js | head -1 | cut -d"'" -f2)" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_SHA" "$RAW" "$MIN" "$GZ" > build-info.json
+          cat build-info.json
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extractor.min.js build-info.json
+          git diff --staged --quiet || git commit -m "build: refresh extractor.min.js [skip ci]"
           git push
+
+      - name: Summary
+        run: |
+          echo "### Game Extractor built :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat build-info.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
