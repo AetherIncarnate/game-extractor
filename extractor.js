@@ -1,11 +1,11 @@
 /*!
- * Game Extractor v3.1 — surface the playable build behind a game page.
+ * Game Extractor v3.2 — surface the playable build behind a game page.
  * Owned / authorised sites only. No dependencies.
  */
 (function () {
   'use strict';
 
-  var VERSION = '3.1.0';
+  var VERSION = '3.2.0';
   var ROOT_ID = 'gex-root';
 
   if (window.__gex) {
@@ -322,8 +322,23 @@
     var tech = techOf(full, ext, tags);
     if (tech) { score += 10; tags.push(tech); parts.push([tech + ' engine', 10]); }
 
-    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'json': 18, 'network': 16, 'script': 12, 'storage': 10, 'attr': 8, 'link': 4 };
+    var evW = { 'live-iframe': 46, 'live-fetch': 34, 'live-xhr': 34, 'global': 32, 'iframe': 26, 'embed': 24, 'object': 24, 'srcdoc': 20, 'finder': 20, 'json': 18, 'network': 16, 'script': 12, 'storage': 10, 'attr': 8, 'link': 4 };
     if (evW[source]) { score += evW[source]; tags.push(source.indexOf('live-') === 0 ? 'runtime' : source); parts.push(['via ' + source, evW[source]]); }
+
+    // find-by-name: the build URL that actually carries the game's name
+    if (state.findName && state.findVariants && state.findVariants.length) {
+      var fl = full;
+      for (var fv = 0; fv < state.findVariants.length; fv++) {
+        if (fl.indexOf(state.findVariants[fv]) > -1) {
+          score += 12; tags.push('named'); parts.push(['name match', 12]);
+          break;
+        }
+      }
+      // the finder dug it out of a config object — the URL itself may be hashed
+      if (source === 'finder' && tags.indexOf('named') === -1) {
+        score += 18; tags.push('named'); parts.push(['found in source', 18]);
+      }
+    }
 
     if (url.pathname === '/' || url.pathname === '') { score -= 70; tags.push('root'); parts.push(['site root', -70]); }
     if (absolute === location.href) { score -= 40; tags.push('self'); parts.push(['current page', -40]); }
@@ -791,7 +806,11 @@
     return !!(rootEl && (rootEl === n || rootEl.contains(n)));
   }
 
-  var state = { min: false, query: '', filter: 'all', showAll: false, favOnly: false, expanded: 0, theater: null };
+  var state = {
+    min: false, query: '', filter: 'all', showAll: false, favOnly: false,
+    expanded: 0, theater: null,
+    findOpen: false, findInput: '', findName: '', findVariants: [], findMsg: null
+  };
   var POS_KEY = 'gex:pos';
 
   var CSS = [
@@ -921,6 +940,19 @@
     '@keyframes gexIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}',
     '.gex-more{width:100%;padding:8px;margin:1px 0 6px;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.12);color:#a9a9b0;font-size:11px;}',
     '.gex-more:hover{background:rgba(255,255,255,.09);color:#fff;}',
+    '.gex-named{background:rgba(48,209,88,.14)!important;color:#7ee39a!important;border-color:rgba(48,209,88,.32)!important;}',
+    '.gex-iconbtn.gex-find{background:rgba(48,209,88,.14);border-color:rgba(48,209,88,.35);color:#7ee39a;}',
+    '.gex-findbar{display:flex;align-items:center;gap:9px;background:rgba(48,209,88,.07);border:1px solid rgba(48,209,88,.24);border-radius:14px;padding:9px 12px;color:#7ee39a;}',
+    '.gex-findlabel{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5fba78;flex:none;}',
+    '.gex-findq{font-size:11.5px;font-weight:600;color:#e8f5ec;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none;}',
+    '.gex-findbar input{flex:1;min-width:60px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:7px 11px;color:#fff;font-size:12px;outline:none;transition:border-color .15s;}',
+    '.gex-findbar input:focus{border-color:rgba(48,209,88,.55);background:rgba(48,209,88,.08);}',
+    '.gex-findbar input::placeholder{color:rgba(142,142,147,.6);}',
+    '.gex-findok{font-size:10.5px;color:#4cd964;font-weight:600;white-space:nowrap;flex:none;}',
+    '.gex-findmiss{font-size:10.5px;color:#ffb340;white-space:nowrap;flex:none;}',
+    '.gex-log{margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:9px;}',
+    '.gex-log .t{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6a6a70;margin-bottom:4px;}',
+    '.gex-log .l{font:10px/1.75 ui-monospace,Menlo,monospace;color:#7c7c81;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
     '.gex-lights{display:flex;gap:7px;align-items:center;flex:none;}',
     '.gex-light{width:11px;height:11px;border-radius:50%;position:relative;display:grid;place-items:center;box-shadow:inset 0 0 2px rgba(0,0,0,.25);}',
     '.gex-light.r{background:#ff5f57;}.gex-light.y{background:#febc2e;}.gex-light.g{background:#28c840;}',
@@ -981,7 +1013,9 @@
     expand: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
     info: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></svg>',
     play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
-    back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>'
+    back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>'
   };
 
   var SOURCE_LABEL = {
@@ -1003,7 +1037,12 @@
     ['autoProbe', 'Auto-probe sizes', 'HEAD-check the top 3 after each scan']
   ];
 
-  function log(msg) { try { console.debug('%c[GameExtractor] ' + msg, 'color:#0a84ff'); } catch (e) { } }
+  var logLines = [];
+  function log(msg) {
+    logLines.unshift(new Date().toLocaleTimeString() + '  ' + msg);
+    if (logLines.length > 30) logLines.length = 30;
+    try { console.debug('%c[GameExtractor] ' + msg, 'color:#0a84ff'); } catch (e) { }
+  }
 
   function toast(msg) {
     var host = document.getElementById(ROOT_ID);
@@ -1030,13 +1069,30 @@
     return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=32';
   }
 
+  function namedMatch(it) {
+    if (it.source === 'finder') return true;
+    if (!state.findVariants || !state.findVariants.length) return false;
+    var u = it.url.toLowerCase();
+    for (var i = 0; i < state.findVariants.length; i++) {
+      if (state.findVariants[i].length > 3 && u.indexOf(state.findVariants[i]) > -1) return true;
+    }
+    return false;
+  }
+
+  function namedCount() {
+    var n = 0;
+    for (var i = 0; i < items.length; i++) if (namedMatch(items[i])) n++;
+    return n;
+  }
+
   function filtered() {
     var q = state.query.trim().toLowerCase();
     var out = [];
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
       if (state.favOnly && !isFav(it.url)) continue;
-      if (state.filter !== 'all' && it.source !== state.filter) continue;
+      if (state.filter === 'name') { if (!state.findName || !namedMatch(it)) continue; }
+      else if (state.filter !== 'all' && it.source !== state.filter) continue;
       if (q && (it.url + ' ' + it.source + ' ' + (it.tech || '') + ' ' + it.tags.join(' ')).toLowerCase().indexOf(q) === -1) continue;
       out.push(it);
     }
@@ -1047,6 +1103,142 @@
     });
     else out.sort(function (a, b) { return b.score - a.score || b.id - a.id; });
     return out;
+  }
+
+  function nameVariants(name) {
+    var n = String(name || '').toLowerCase().trim();
+    if (!n) return [];
+    var out = [n];
+    var slug = n.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (slug.length > 3) out.push(slug);
+    var und = slug.replace(/-/g, '_');
+    if (und !== slug && und.length > 3) out.push(und);
+    var words = n.split(/\s+/).filter(Boolean);
+    if (words.length > 1) {
+      var longest = words.slice().sort(function (a, b) { return b.length - a.length; })[0];
+      if (longest.length >= 6 && out.indexOf(longest) === -1) out.push(longest);
+    }
+    return out.filter(function (v, i, a) { return v.length >= 3 && a.indexOf(v) === i; });
+  }
+
+  // what the page itself claims the game is called
+  function deriveName() {
+    try {
+      var t = (document.title || '').trim();
+      if (t) {
+        var segs = t.split(/\s*[|·•—–]\s+|\s+-\s+|\s+–\s+/).filter(Boolean);
+        var pick = segs[0] || t;
+        // "PixelPort — Play Neon Drift": the site brand is the host, the game is the other half
+        if (CORE && CORE.length > 2 && segs.length > 1) {
+          var noBrand = segs.filter(function (s) { return s.toLowerCase().indexOf(CORE.toLowerCase()) === -1; });
+          if (noBrand.length) pick = noBrand[0];
+        }
+        pick = pick
+          .replace(/^(play|watch|run|download)\s+/i, '')
+          .replace(/\s+(game|games|portal|arcade|web|online|free|unblocked)\s*$/i, '')
+          .trim();
+        if (pick && pick.length > 2) return pick.slice(0, 80);
+      }
+    } catch (e) { }
+    try {
+      var h = document.querySelector('h1, h2');
+      if (h && h.textContent && h.textContent.trim().length > 2) return h.textContent.trim().slice(0, 80);
+    } catch (e) { }
+    try {
+      var og = document.querySelector('meta[property="og:title"]');
+      if (og && og.getAttribute('content')) return og.getAttribute('content').trim().slice(0, 80);
+    } catch (e) { }
+    try {
+      var segs = location.pathname.split('/').filter(Boolean);
+      for (var i = segs.length - 1; i >= 0; i--) {
+        var s = segs[i].replace(/\.(html?|php|asp|aspx|jsp)$/i, '');
+        if (!/^(game|games|play|embed|iframe|player|index|view|load|show|page|roms?|v\d+)$/i.test(s) && s.length > 2) {
+          return s.replace(/[-_+]/g, ' ').trim();
+        }
+      }
+    } catch (e) { }
+    return CURRENT_HOST || '';
+  }
+
+  // hunt the page's own sources for URLs that belong to a game name
+  function runFinder(name) {
+    var nm = String(name || '').trim();
+    if (!nm) { toast('Type a game name first'); return; }
+    state.findName = nm;
+    state.findVariants = nameVariants(nm);
+    var v = state.findVariants;
+    var before = items.length;
+
+    function grab(u) {
+      try { if (u && !/^(data:|javascript:|mailto:)/i.test(u)) addCandidate(u, 'finder'); } catch (e) { }
+    }
+
+    try {
+      var scripts = document.querySelectorAll('script:not([src])');
+      for (var i = 0; i < scripts.length && i < 500; i++) {
+        var text = scripts[i].textContent || '';
+        if (!text || text.length > 900000) continue;
+        var tl = text.toLowerCase();
+        var anyHit = false;
+        for (var x = 0; x < v.length; x++) if (tl.indexOf(v[x]) > -1) { anyHit = true; break; }
+        if (!anyHit) continue;
+
+        // line-level: a line that mentions the name → URLs on that line and the next
+        var lines = text.split(/\r?\n/);
+        for (var L = 0; L < lines.length && L < 4000; L++) {
+          var ll = lines[L].toLowerCase();
+          var onLine = false;
+          for (var y = 0; y < v.length; y++) if (ll.indexOf(v[y]) > -1) { onLine = true; break; }
+          if (!onLine) continue;
+          var urls = lines[L].match(/https?:\/\/[^\s"'`<>()\\]+|["'](\/[A-Za-z0-9_.\-/]{3,150}\.(?:html?|swf|wasm|unityweb|data|pck|zip|json))["']/gi) || [];
+          for (var q = 0; q < urls.length; q++) grab(urls[q].replace(/^["'(]|[")'`]$/g, '').replace(/[.,;)\]]+$/, ''));
+          if (L + 1 < lines.length) {
+            var nxt = (lines[L + 1] || '').match(/https?:\/\/[^\s"'`<>()\\]+/gi) || [];
+            for (var q2 = 0; q2 < nxt.length; q2++) grab(nxt[q2]);
+          }
+        }
+
+        // object-level: JSON whose content mentions the name → every URL inside it
+        var trimmed = text.trim();
+        if (/^\s*[\[{]/.test(trimmed)) {
+          try {
+            var obj = JSON.parse(trimmed);
+            var sj = JSON.stringify(obj).toLowerCase();
+            var inObj = false;
+            for (var z = 0; z < v.length; z++) if (sj.indexOf(v[z]) > -1) { inObj = true; break; }
+            if (inObj) {
+              var hs = [];
+              walkJson(obj, hs, 0);
+              for (var h = 0; h < hs.length; h++) grab(hs[h]);
+            }
+          } catch (e) { }
+        }
+      }
+    } catch (e) { }
+
+    try {
+      var els = document.querySelectorAll('[data-src],[data-url],[data-game],[data-href],[data-embed],[data-path],[data-config],[data-rom],[data-file]');
+      for (var d = 0; d < els.length && d < 400; d++) {
+        var el = els[d];
+        var blob = '';
+        try { blob = (el.tagName + ' ' + (el.id || '') + ' ' + (el.className || '')).toLowerCase(); } catch (e2) { }
+        var mDom = false;
+        for (var w = 0; w < v.length; w++) if (blob.indexOf(v[w]) > -1) { mDom = true; break; }
+        if (!mDom) continue;
+        var vv = el.getAttribute('data-src') || el.getAttribute('data-url') || el.getAttribute('data-game') ||
+          el.getAttribute('data-href') || el.getAttribute('data-embed') || el.getAttribute('data-path') ||
+          el.getAttribute('data-rom') || el.getAttribute('data-file');
+        if (vv) grab(vv);
+      }
+    } catch (e) { }
+
+    state.findMsg = { ok: namedCount() > 0, n: namedCount() };
+    log('find "' + nm + '" → ' + state.findMsg.n + ' named · ' + (items.length - before) + ' new from sources');
+    reevaluate();
+    render();
+    toast(state.findMsg.ok
+      ? state.findMsg.n + ' match' + (state.findMsg.n === 1 ? '' : 'es') + ' for “' + nm + '”'
+      : 'No source matched “' + nm + '” — try the exact slug');
   }
 
   function detailHtml(it) {
@@ -1082,10 +1274,11 @@
     var pills = '';
     if (best) pills += '<span class="gex-pill best">' + ICONS.spark + 'TOP MATCH</span>';
     pills += '<span class="gex-pill src">' + esc(SOURCE_LABEL[it.source] || it.source) + '</span>';
+    if (it.tags.indexOf('named') > -1 || it.tags.indexOf('name') > -1) pills += '<span class="gex-pill dim gex-named">' + ICONS.target + 'named</span>';
     if (it.tech) pills += '<span class="gex-pill dim gex-tech">' + esc(it.tech) + '</span>';
     var shown = 0;
     for (var t = 0; t < it.tags.length && shown < 2; t++) {
-      if (it.tags[t] === it.tech) continue;
+      if (it.tags[t] === it.tech || it.tags[t] === 'name' || it.tags[t] === 'named') continue;
       pills += '<span class="gex-pill dim">' + esc(it.tags[t]) + '</span>';
       shown++;
     }
@@ -1137,12 +1330,32 @@
     for (var i = 0; i < items.length; i++) counts[items[i].source] = (counts[items[i].source] || 0) + 1;
     var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 5);
     var html = tab('all', 'All', items.length);
-    for (var k = 0; k < keys.length; k++) html += tab(keys[k], SOURCE_LABEL[keys[k]] || keys[k], counts[keys[k]]);
+    if (state.findName) html += tab('name', 'named', namedCount());
+    for (var k = 0; k < keys.length; k++) if (keys[k] !== 'finder') html += tab(keys[k], SOURCE_LABEL[keys[k]] || keys[k], counts[keys[k]]);
     function tab(id, label, n) {
       return '<button class="gex-tab' + (state.filter === id ? ' on' : '') + '" data-act="filter" data-filter="' + id + '">' +
         esc(label) + ' ' + n + '</button>';
     }
     return '<div class="gex-tabs">' + html + '</div>';
+  }
+
+  function findRowHtml() {
+    if (!state.findOpen && !state.findName) return '';
+    var derived = deriveName();
+    var msg = '';
+    if (state.findMsg) {
+      msg = state.findMsg.ok
+        ? '<span class="gex-findok">✓ ' + state.findMsg.n + ' match' + (state.findMsg.n === 1 ? '' : 'es') + '</span>'
+        : '<span class="gex-findmiss">no source matched — try the exact slug</span>';
+    }
+    return '<div class="gex-findbar">' + ICONS.target +
+      '<span class="gex-findlabel">find</span>' +
+      (state.findName ? '<span class="gex-findq">' + esc(state.findName) + '</span>' : '') +
+      '<input type="text" data-finder value="' + esc(state.findInput) + '" placeholder="' + (derived ? 'e.g. ' + esc(derived) : 'game name') + '" spellcheck="false" aria-label="Game name">' +
+      '<button class="gex-mini go" data-act="find-go" title="Search the page source for this name">Find</button>' +
+      msg +
+      (state.findName ? '<button class="gex-mini" data-act="find-clear" title="Clear name filter">Clear</button>' : '') +
+      '</div>';
   }
 
   function settingsHtml() {
@@ -1160,6 +1373,11 @@
       '<div class="gex-row" style="margin-top:8px">' +
       '<button class="gex-btn" style="flex:1;justify-content:center" data-act="rescan">' + ICONS.refresh + 'Re-scan now</button>' +
       '<button class="gex-btn ghost" data-act="reset">Defaults</button>' +
+      '</div>' +
+      '<div class="gex-log"><div class="t">Activity</div>' +
+      (logLines.length
+        ? logLines.slice(0, 6).map(function (l) { return '<div class="l">' + esc(l) + '</div>'; }).join('')
+        : '<div class="l" style="color:#55555c">quiet so far</div>') +
       '</div></div></div>';
   }
 
@@ -1180,23 +1398,26 @@
       '<span class="gex-live"><i></i><span data-status>idle</span></span>' +
       '<span style="margin-left:auto;display:flex;gap:6px;align-items:center">' +
       '<button class="gex-iconbtn' + (state.favOnly ? ' on' : '') + '" data-act="favonly" title="Pinned only">' + (state.favOnly ? ICONS.starOn : ICONS.star) + '</button>' +
+      '<button class="gex-iconbtn' + (state.findName ? ' on gex-find' : '') + '" data-act="find" title="Find a build by name (Alt+F)">' + ICONS.target + '</button>' +
       '<button class="gex-iconbtn" data-act="settings" title="Filters">' + ICONS.gear + '</button>' +
       '</span></div>' +
       '<div class="gex-tool">' +
+      '<div data-find>' + findRowHtml() + '</div>' +
       '<div class="gex-row">' +
       '<label class="gex-field">' + ICONS.search +
-      '<input type="text" data-query placeholder="Filter by host, engine, source…" spellcheck="false" aria-label="Filter results" value="' + esc(state.query) + '"></label>' +
+      '<input type="text" data-query placeholder="Filter by host, engine, source…  ( / )" spellcheck="false" aria-label="Filter results" value="' + esc(state.query) + '"></label>' +
       sortSeg() +
       '</div>' +
       '<div class="gex-row"><div data-tabs style="flex:1;min-width:0">' + tabsHtml() + '</div>' +
       '<button class="gex-btn" data-act="copyall" title="Copy every visible URL">' + ICONS.copy + '</button>' +
+      '<button class="gex-btn" data-act="gallery" title="Save every candidate as a standalone HTML gallery">' + ICONS.grid + '</button>' +
       '<button class="gex-btn" data-act="export" title="Export JSON report">' + ICONS.download + '</button></div>' +
       '</div>' +
       '<div class="gex-meta"><span>host <b>' + esc(CURRENT_HOST || 'sandbox') + '</b></span>' +
       '<span><b data-count>' + filtered().length + '</b> shown · <b>' + items.length + '</b> kept · <b>' + stats.imgBlocked + '</b> images blocked</span></div>' +
       '<div class="gex-body" data-body>' + listHtml() + '</div>' +
       '<div data-settings data-open="0"></div>' +
-      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
+      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>Alt</kbd><kbd>F</kbd> find <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
       '<span style="margin-left:auto;font-size:10px;color:#6a6a70">authorised sites only</span></div>';
   }
 
@@ -1209,9 +1430,12 @@
     if (meta) meta.innerHTML = '<b>' + list.length + '</b> shown · <b>' + items.length + '</b> kept · <b>' + stats.imgBlocked + '</b> images blocked';
     var body = host.querySelector('[data-body]');
     var active = document.activeElement;
+    var skipFinder = !!(active && active.hasAttribute && active.hasAttribute('data-finder') && active === host.querySelector('[data-finder]'));
     var qVal = null;
     if (active && active.hasAttribute && active.hasAttribute('data-query')) qVal = { v: active.value, s: active.selectionStart };
     if (body) body.innerHTML = listHtml();
+    var fbar = host.querySelector('[data-find]');
+    if (fbar && !skipFinder) fbar.innerHTML = findRowHtml();
     var tabs = host.querySelector('[data-tabs]');
     if (tabs) tabs.innerHTML = tabsHtml();
     var seg = host.querySelector('.gex-seg');
@@ -1328,11 +1552,18 @@
     host.addEventListener('click', onClick);
     host.addEventListener('input', onInput);
     host.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target.getAttribute && e.target.hasAttribute('data-query')) {
-        var top = filtered();
-        if (!top.length) return;
-        if (e.shiftKey) openTheater(top[0].url);
-        else openUrl(top[0].url);
+      if (e.key === 'Enter' && e.target.getAttribute) {
+        if (e.target.hasAttribute('data-finder')) {
+          e.preventDefault();
+          runFinder(e.target.value || deriveName());
+          return;
+        }
+        if (e.target.hasAttribute('data-query')) {
+          var top = filtered();
+          if (!top.length) return;
+          if (e.shiftKey) openTheater(top[0].url);
+          else openUrl(top[0].url);
+        }
       }
     });
   }
@@ -1509,6 +1740,42 @@
     } catch (e) { toast('Download blocked'); }
   }
 
+  function exportGallery() {
+    var list = filtered();
+    if (!list.length) { toast('Nothing to export'); return; }
+    var cards = list.map(function (it, i) {
+      return '<div class="c"><div class="top"><img src="https://www.google.com/s2/favicons?domain=' +
+        encodeURIComponent(hostOf(it.url)) + '&sz=64" onerror="this.remove()">' +
+        '<span class="h"><b>' + (i + 1) + '. ' + esc(hostOf(it.url)) + '</b><small>' +
+        esc(it.tech || SOURCE_LABEL[it.source] || it.source) + ' · score ' + it.score + '</small></span></div>' +
+        '<div class="u">' + esc(it.url) + '</div>' +
+        '<div class="a"><a class="o" href="' + esc(it.url) + '" target="_blank" rel="noopener">Open</a>' +
+        '<button class="e" data-u="' + esc(it.url) + '">Embed code</button>' +
+        '<button class="s" data-u="' + esc(it.url) + '">Sandbox</button></div></div>';
+    }).join('');
+    var html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Game gallery · ' + esc(hostOf(location.href || '')) + '</title>' +
+      '<style>*{box-sizing:border-box}body{margin:0;background:#0b0b10;color:#f5f5f7;font:14px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:36px 20px}' +
+      '.w{max-width:1100px;margin:0 auto}h1{font-size:22px;letter-spacing:-.02em;margin:0}p.m{color:#8e8e93;font-size:12px;margin-top:6px}' +
+      '.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:22px}' +
+      '.c{background:#15151b;border:1px solid #262630;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:9px}' +
+      '.top{display:flex;align-items:center;gap:10px}.top img{width:26px;height:26px;border-radius:7px}.h{display:flex;flex-direction:column;min-width:0}' +
+      '.h b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.h small{color:#7c7c81;font-size:11px}' +
+      '.u{font:11px/1.5 ui-monospace,Menlo,monospace;color:#a9a9b0;word-break:break-all}' +
+      '.a{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}.o{background:linear-gradient(180deg,#2c95ff,#0a73e8);color:#fff;text-decoration:none;font-size:12px;font-weight:600;padding:7px 13px;border-radius:9px}' +
+      '.e,.s{background:#22222b;border:1px solid #2e2e3a;color:#c9c9d4;font-size:12px;padding:7px 11px;border-radius:9px;cursor:pointer}' +
+      '.e:hover,.s:hover{background:#2a2a34}#tip{position:fixed;left:16px;bottom:16px;background:#30d158;color:#04120f;font-weight:600;font-size:12px;padding:8px 14px;border-radius:99px;display:none;z-index:9}</style></head>' +
+      '<body><div class="w"><h1>Extracted games · ' + esc(CURRENT_HOST || 'page') + '</h1>' +
+      '<p class="m">Generated ' + new Date().toLocaleString() + ' · ' + list.length + ' candidates · Game Extractor v' + VERSION + '</p>' +
+      '<div class="g">' + cards + '</div></div><div id="tip"></div>' +
+      '<script>function cpy(t){try{navigator.clipboard.writeText(t).then(function(){},function(){fb()})}catch(e){fb()}function fb(){var ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove()}' +
+      'var p=document.getElementById("tip");p.textContent="Copied to clipboard";p.style.display="block";setTimeout(function(){p.style.display="none"},1300)}' +
+      'document.querySelectorAll(".e").forEach(function(b){b.addEventListener("click",function(){cpy(\'<iframe src="\'+b.dataset.u+\'" style="width:100%;height:100%;border:0" allow="autoplay; fullscreen; gamepad *" allowfullscreen><\\/iframe>\')})})' +
+      'document.querySelectorAll(".s").forEach(function(b){b.addEventListener("click",function(){window.open(b.dataset.u,"_blank")})})<\/script></body></html>';
+    download(html, 'game-gallery-' + (CORE || 'page') + '.html', 'text/html;charset=utf-8');
+    toast('HTML gallery saved');
+  }
+
   function onClick(e) {
     var btn = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!btn) return;
@@ -1603,6 +1870,26 @@
 
     if (act === 'fav') { toggleFav(url); render(); return; }
     if (act === 'favonly') { state.favOnly = !state.favOnly; state.showAll = false; render(); return; }
+
+    if (act === 'find') {
+      state.findOpen = !state.findOpen;
+      render();
+      var fi = host.querySelector('[data-finder]');
+      if (state.findOpen && fi) fi.focus();
+      return;
+    }
+    if (act === 'find-go') {
+      var finput = host.querySelector('[data-finder]');
+      runFinder((finput ? finput.value : state.findInput) || deriveName());
+      return;
+    }
+    if (act === 'find-clear') {
+      state.findName = ''; state.findVariants = []; state.findMsg = null; state.findInput = '';
+      if (state.filter === 'name') state.filter = 'all';
+      reevaluate(); render();
+      return;
+    }
+    if (act === 'gallery') { exportGallery(); return; }
     if (act === 'sort') {
       settings.sort = btn.getAttribute('data-sort') || 'score';
       state.showAll = false; store(); render(); return;
@@ -1640,6 +1927,11 @@
   function onInput(e) {
     var t = e.target;
     if (!t || !t.getAttribute) return;
+    if (t.hasAttribute('data-finder')) {
+      // store the draft only — re-rendering here would jump the caret
+      state.findInput = t.value;
+      return;
+    }
     if (t.hasAttribute('data-query')) {
       state.query = t.value;
       render();
@@ -1714,6 +2006,13 @@
     show: function () { setMinimised(false); },
     rescan: function () { scanAll('api'); },
     urls: function () { return items.map(function (i) { return i.url; }); },
+    find: function (name) {
+      state.findOpen = true;
+      state.findInput = name || '';
+      render();
+      if (name) runFinder(name);
+    },
+    named: function () { return items.filter(function (i) { return namedMatch(i); }).map(function (i) { return i.url; }); },
     favorites: function () { return Object.keys(favs); },
     theater: function (u) { openTheater(u || (filtered()[0] && filtered()[0].url)); },
     settings: settings,
@@ -1722,6 +2021,28 @@
 
   function onKey(e) {
     if (e.altKey && (e.key === 'g' || e.key === 'G')) { e.preventDefault(); toggle(); return; }
+    if (e.altKey && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      var root = document.getElementById(ROOT_ID);
+      if (root && !state.min) {
+        state.findOpen = true;
+        render();
+        var fi = root.querySelector('[data-finder]');
+        if (fi) fi.focus();
+      }
+      return;
+    }
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+      var a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      var root2 = document.getElementById(ROOT_ID);
+      if (root2 && !state.min) {
+        e.preventDefault();
+        var q = root2.querySelector('[data-query]');
+        if (q) q.focus();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
       if (document.getElementById('gex-theater')) { closeTheater(); return; }
       if (!state.min && document.getElementById(ROOT_ID)) setMinimised(true);
