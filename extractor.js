@@ -1,11 +1,11 @@
 /*!
- * Game Extractor v3.5 — surface the playable build behind a game page.
+ * Game Extractor v3.6 — surface the playable build behind a game page.
  * Owned / authorised sites only. No dependencies.
  */
 (function () {
   'use strict';
 
-  var VERSION = '3.5.0';
+  var VERSION = '3.6.0';
   var ROOT_ID = 'gex-root';
 
   if (window.__gex) {
@@ -819,6 +819,7 @@
   var state = {
     min: false, query: '', filter: 'all', showAll: false, favOnly: false,
     expanded: 0, theater: null,
+    view: 'results',
     findOpen: false, findInput: '', findName: '', findVariants: [], findWords: [],
     findMsg: null, findDeep: true, findBusy: false,
     findProgress: { phase: '', done: 0, total: 0 }
@@ -967,6 +968,22 @@
     '.gex-num input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer;}',
     '.gex-num input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff;cursor:pointer;}',
     '.gex-num output{font:600 10.5px ui-monospace,monospace;color:#fff;min-width:20px;text-align:right;}',
+    '.gex-view{animation:gexViewIn .38s cubic-bezier(.32,.72,0,1) both;}',
+    '@keyframes gexViewIn{from{opacity:0;transform:translateX(18px);filter:blur(5px)}to{opacity:1;transform:translateX(0);filter:blur(0)}}',
+    '.gex-settings-page{max-height:min(65vh,560px);overflow:auto;padding:14px 18px 18px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent;animation:gexSettingsIn .42s cubic-bezier(.32,.72,0,1) both;}',
+    '@keyframes gexSettingsIn{from{opacity:0;transform:translateX(22px);filter:blur(6px)}to{opacity:1;transform:translateX(0);filter:blur(0)}}',
+    '.gex-settings-nav{display:flex;align-items:center;gap:11px;margin-bottom:14px;padding:0 1px;}',
+    '.gex-settings-back{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:#b9b9c0;box-shadow:inset 0 1px 0 rgba(255,255,255,.06);transition:transform .22s cubic-bezier(.34,1.56,.64,1),background .2s,color .2s;}',
+    '.gex-settings-back:hover{background:rgba(255,255,255,.13);color:#fff;transform:translateX(-2px)}',
+    '.gex-settings-back:active{transform:scale(.9)}',
+    '.gex-settings-nav h2{font-size:17px;font-weight:650;letter-spacing:-.025em;color:#fff;}',
+    '.gex-settings-nav p{font-size:10.5px;color:#6e6e73;margin-top:1px;}',
+    '.gex-settings-page .gex-set{padding:0;}',
+    '.gex-settings-page .gex-panel{padding:14px 15px;border-radius:16px;background:rgba(255,255,255,.035);box-shadow:inset 0 1px 0 rgba(255,255,255,.05);}',
+    '.gex-settings-page .gex-panel+.gex-panel{margin-top:10px;}',
+    '.gex-settings-page .gex-opt{padding:8px 0;}',
+    '.gex-settings-page .gex-opt+.gex-opt{border-top:1px solid rgba(255,255,255,.055);}',
+    '.gex-settings-page .gex-log{max-height:128px;overflow:auto;}',
     '.gex-toast{position:absolute;left:50%;bottom:50px;transform:translateX(-50%);background:rgba(48,209,88,.95);color:#04120a;',
     'font-size:11px;font-weight:600;padding:7px 13px;border-radius:999px;box-shadow:0 12px 28px -6px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.3);pointer-events:none;animation:gexIn .45s cubic-bezier(.34,1.56,.64,1) both;z-index:3;white-space:nowrap;}',
     '@keyframes gexIn{0%{opacity:0;transform:translate(-50%,10px) scale(.9)}60%{opacity:1;transform:translate(-50%,-2px) scale(1.03)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}',
@@ -1036,6 +1053,7 @@
     '.gex-iconbtn:hover{background:rgba(255,255,255,.13);color:#fff;transform:translateY(-1px);box-shadow:0 6px 16px -6px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);}',
     '.gex-iconbtn:active{transform:scale(.9);}',
     '.gex-iconbtn.on{background:rgba(255,214,10,.16);border-color:rgba(255,214,10,.35);color:#ffd60a;}',
+    '.gex-iconbtn.gex-settings-active{background:rgba(10,132,255,.17);border-color:rgba(10,132,255,.38);color:#8fc7ff;box-shadow:0 0 16px -5px rgba(10,132,255,.65),inset 0 1px 0 rgba(255,255,255,.08);}',
     '#gex-theater{position:fixed;inset:0;z-index:2147483001;background:rgba(5,5,8,.92);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);display:flex;flex-direction:column;animation:gexFade .4s cubic-bezier(.32,.72,0,1) both;}',
     '@keyframes gexFade{from{opacity:0;filter:blur(8px)}to{opacity:1;filter:blur(0)}}',
     '#gex-theater .bar{animation:gexRise .45s cubic-bezier(.32,.72,0,1) .05s both;}',
@@ -1051,28 +1069,28 @@
 
   var ICONS = {
     logo: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M6.5 11.5h3.5M8.25 9.75v3.5"/><circle cx="15.5" cy="10.75" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="13" r="1" fill="currentColor" stroke="none"/></svg>',
-    gear: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-    search: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
-    download: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10L12 14.5 16.5 10"/><path d="M4 20h16"/></svg>',
-    refresh: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 4.5v5h-5"/><path d="M20.2 14a8.2 8.2 0 1 1-1.3-6.4l1.6-1.7"/></svg>',
-    copy: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H4.5A1.5 1.5 0 0 1 3 13.5V4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V6"/></svg>',
-    open: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>',
-    box: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M3 8.5v7L12 20l9-4.5v-7"/><path d="M12 13v7"/></svg>',
-    code: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l-5 6 5 6M15 6l5 6-5 6"/></svg>',
-    ruler: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15.5 15.5 3l5.5 5.5L8.5 21z"/><path d="M7 12l2 2M10.5 8.5l2 2M14 5l2 2"/></svg>',
-    spark: '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 2.5l2.3 6.8 6.7 2.4-6.7 2.4L12 21l-2.3-6.9L3 11.7l6.7-2.4z"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+    search: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+    download: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+    open: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+    box: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+    code: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    ruler: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>',
     minus: '<svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="#7d5a00" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>',
     x: '<svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="#7d2e1f" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     plus: '<svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="#0f5c22" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     drag: '<svg viewBox="0 0 10 16" width="10" height="14" fill="currentColor"><circle cx="2.5" cy="3" r="1.3"/><circle cx="7.5" cy="3" r="1.3"/><circle cx="2.5" cy="8" r="1.3"/><circle cx="7.5" cy="8" r="1.3"/><circle cx="2.5" cy="13" r="1.3"/><circle cx="7.5" cy="13" r="1.3"/></svg>',
-    star: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.7l5.9-.9z"/></svg>',
-    starOn: '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.7l5.9-.9z"/></svg>',
-    expand: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
-    info: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></svg>',
-    play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
-    back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
-    target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
-    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>'
+    star: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    starOn: '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    expand: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>',
+    info: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+    back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+    target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4.268 21a2 2 0 0 0 1.727 1h12a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="m9 18-1.5-1.5"/><circle cx="5" cy="14" r="3"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>'
   };
 
   var SOURCE_LABEL = {
@@ -1341,6 +1359,141 @@
     return out;
   }
 
+  function htmlDecodeEntities(s) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.innerHTML = String(s).slice(0, 500000);
+      return ta.value;
+    } catch (e) { return s; }
+  }
+
+  function jsUnescape(s) {
+    try {
+      return String(s)
+        .replace(/\\u([0-9a-fA-F]{4})/g, function (_m, h) { try { return String.fromCharCode(parseInt(h, 16)); } catch (e) { return _m; } })
+        .replace(/\\x([0-9a-fA-F]{2})/g, function (_m, h) { try { return String.fromCharCode(parseInt(h, 16)); } catch (e) { return _m; } })
+        .replace(/\\\//g, '/')
+        .replace(/\\(['"\\])/g, '$1');
+    } catch (e) { return s; }
+  }
+
+  function uriDecodeDeep(s) {
+    var out = String(s);
+    try {
+      for (var i = 0; i < 3; i++) {
+        if (out.indexOf('%') === -1) break;
+        var next = decodeURIComponent(out);
+        if (next === out) break;
+        out = next;
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function decodeLayers(text) {
+    var layers = [{ text: text, label: '' }];
+    try {
+      if (!text || text.length > 1200000) return layers;
+      var u = jsUnescape(text);
+      if (u !== text) layers.push({ text: u, label: 'unescaped' });
+      var d = uriDecodeDeep(text);
+      if (d !== text) layers.push({ text: d, label: 'uri-decoded' });
+      if (text.indexOf('&') > -1 && text.indexOf(';') > -1) {
+        var h = htmlDecodeEntities(text.slice(0, 400000));
+        if (h && h !== text.slice(0, 400000)) layers.push({ text: h, label: 'entity-decoded' });
+      }
+    } catch (e) { }
+    return layers;
+  }
+
+  function extractAtobPayloads(text) {
+    var out = [];
+    try {
+      var m = String(text).match(/\batob\s*\(\s*["'`]([A-Za-z0-9+\/=_-]{20,}={0,2})["'`]\s*\)/g) || [];
+      for (var i = 0; i < m.length && i < 20; i++) {
+        var inner = (m[i].match(/["'`]([A-Za-z0-9+\/=_-]{20,}={0,2})["'`]/) || [])[1] || '';
+        if (!inner) continue;
+        try {
+          var norm = inner.replace(/-/g, '+').replace(/_/g, '/');
+          while (norm.length % 4) norm += '=';
+          var dec = atob(norm);
+          if (dec && dec.length > 4 && dec.length < 200000) out.push(dec);
+        } catch (e) { }
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function extractCssUrls(text) {
+    var out = [];
+    try {
+      var re = /url\(\s*(['"]?)([^'")\s]{3,300})\1\s*\)/gi;
+      var m;
+      var g = 0;
+      while ((m = re.exec(String(text))) && g++ < 40) {
+        if (m[2] && m[2].indexOf('data:') !== 0) out.push(m[2]);
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function extractSrcsetUrls(srcset) {
+    var out = [];
+    try {
+      var parts = String(srcset).split(',');
+      for (var i = 0; i < parts.length && i < 12; i++) {
+        var tok = parts[i].trim().split(/\s+/)[0] || '';
+        if (tok.length > 3 && tok.indexOf('data:') !== 0) out.push(tok);
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function extractGameishPaths(text) {
+    var out = [];
+    try {
+      var m = String(text).match(/["'`(\s=](\/[A-Za-z0-9_.\-\/]{2,180}(?:[?#][^"'`\s)<>]*)?)/g) || [];
+      for (var i = 0; i < m.length && i < 60; i++) {
+        var u = m[i].replace(/^["'`(\s=]/, '');
+        var l = u.toLowerCase();
+        if (l.length < 4 || l.indexOf('.') === -1 && l.split('/').filter(Boolean).length < 2) continue;
+        if (/(game|play|embed|iframe|build|arcade|rom|wasm|unity|godot|loader|runtime|client|stage|webgl|html5|g\/|v\d+\/)/i.test(u) ||
+            /\.(html?|swf|wasm|unityweb|data|pck|zip|json|bundle|assets|br|gz|bin|js|php|asp)/i.test(u)) {
+          out.push(u);
+        }
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function extractJsChunkUrls(text, base) {
+    var out = [];
+    try {
+      var m = String(text).match(/["'`]([^"'`]{2,220}\.chunk\.js[^"'`]*|[^"'`]{2,220}\/chunks?\/[^"'`]{1,120}\.js|[^"'`/_]{1,80}\.[a-f0-9]{6,}\.js)["'`]/gi) || [];
+      for (var i = 0; i < m.length && i < 20; i++) {
+        var u = m[i].replace(/^["'`]|["'`]$/g, '');
+        var abs = resolveUrl(u, base || document.baseURI);
+        if (abs && /^https?:/.test(abs) && !NOISE_RE.test(abs.toLowerCase())) out.push(abs);
+      }
+      var dyn = String(text).match(/import\s*\(\s*["'`]([^"'`]{2,220}\.js)["'`]\s*\)/gi) || [];
+      for (var j = 0; j < dyn.length && j < 10; j++) {
+        var inner = (dyn[j].match(/["'`]([^"'`]{2,220}\.js)["'`]/) || [])[1] || '';
+        if (!inner) continue;
+        var abs2 = resolveUrl(inner, base || document.baseURI);
+        if (abs2 && /^https?:/.test(abs2)) out.push(abs2);
+      }
+    } catch (e) { }
+    return out;
+  }
+
+  function sourceMapUrl(jsText, jsUrl) {
+    try {
+      var m = String(jsText).match(/\/\/[#@]\s*sourceMappingURL\s*=\s*([^\s*]+)/i);
+      if (!m || !m[1] || m[1].indexOf('data:') === 0) return null;
+      return resolveUrl(m[1].trim(), jsUrl);
+    } catch (e) { return null; }
+  }
+
   function snippetAround(text, pos, len) {
     try {
       var s = Math.max(0, pos - 70);
@@ -1387,6 +1540,12 @@
       var e = Math.min(text.length, h.pos + h.len + radius);
       var win = text.slice(s, e);
       var urls = extractUrlsFromText(win);
+      try {
+        var gp = extractGameishPaths(win);
+        for (var gi = 0; gi < gp.length; gi++) urls.push(gp[gi]);
+        var cu = extractCssUrls(win);
+        for (var ci = 0; ci < cu.length; ci++) urls.push(cu[ci]);
+      } catch (e) { }
       for (var j = 0; j < urls.length; j++) {
         var u = urls[j];
         if (!u || seenU[u]) continue;
@@ -1463,17 +1622,36 @@
       for (var i = 0; i < scripts.length && i < 500; i++) {
         var rawText = scripts[i].textContent || '';
         if (!rawText || rawText.length > 1200000) continue;
-        var text = joinSplitStrings(rawText);
-        var tl = text.toLowerCase();
-        var hits = findHitPositions(tl, v);
-        if (!hits.length) continue;
-        var near = urlsNearHits(text, hits, 2000);
-        for (var n = 0; n < near.length && n < 30; n++) {
-          grabFinder(near[n].url, 'inline js', near[n].snippet, near[n].hit.variant, proximityBonus(near[n].dist), 'name nearby');
+        var joined = joinSplitStrings(rawText);
+        var layers = decodeLayers(joined);
+        try {
+          var atobs = extractAtobPayloads(rawText);
+          for (var ab = 0; ab < atobs.length; ab++) {
+            if (atobs[ab].length > 20) layers.push({ text: atobs[ab], label: 'atob-decoded' });
+          }
+        } catch (e) { }
+        var minified = (rawText.match(/\n/g) || []).length < 20 && rawText.length > 50000;
+        var radius = minified ? 8000 : 2000;
+        var anyLayerHit = false;
+        for (var li = 0; li < layers.length; li++) {
+          var text = layers[li].text;
+          var tl = text.toLowerCase();
+          var hits = findHitPositions(tl, v);
+          if (!hits.length) continue;
+          anyLayerHit = true;
+          var tag = layers[li].label ? 'inline js ' + layers[li].label : 'inline js';
+          var near = urlsNearHits(text, hits, radius);
+          for (var n = 0; n < near.length && n < 30; n++) {
+            grabFinder(near[n].url, tag, near[n].snippet, near[n].hit.variant, proximityBonus(near[n].dist), 'name nearby');
+          }
         }
+        if (!anyLayerHit) continue;
+        var text0 = joined;
+        var hits0 = findHitPositions(text0.toLowerCase(), v);
+        if (!hits0.length) continue;
         var b64u = b64UrlsFromText(rawText);
         for (var b = 0; b < b64u.length; b++) {
-          grabFinder(b64u[b], 'inline js b64', snippetAround(text, hits[0].pos, hits[0].len), hits[0].variant, 14, 'encoded url');
+          grabFinder(b64u[b], 'inline js b64', snippetAround(text0, hits0[0].pos, hits0[0].len), hits0[0].variant, 14, 'encoded url');
         }
         var trimmed = rawText.trim();
         if (/^\s*[\[{]/.test(trimmed)) {
@@ -1506,44 +1684,157 @@
     } catch (e) { }
     try {
       var all = document.querySelectorAll('*');
-      var cap = Math.min(all.length, 6000);
-      var URL_ATTRS = ['src', 'href', 'data-src', 'data-url', 'data-game', 'data-href', 'data-embed', 'data-path', 'data-config', 'data-rom', 'data-file', 'data-iframe', 'data-frame', 'data-link', 'content', 'value', 'action', 'poster'];
+      var cap = Math.min(all.length, 9000);
+      var URL_ATTRS = ['src', 'href', 'data-src', 'data-url', 'data-game', 'data-href', 'data-embed', 'data-path', 'data-config', 'data-rom', 'data-file', 'data-iframe', 'data-frame', 'data-link', 'content', 'value', 'action', 'poster', 'data-srcset', 'data-original', 'data-lazy-src', 'data-href-url', 'data-target-url'];
       for (var d = 0; d < cap; d++) {
         var el = all[d];
         var ident = '';
+        var allAttrText = '';
         try {
           ident = ((el.tagName || '') + ' ' + (el.id || '') + ' ' + (el.className || '') + ' ' +
             (el.getAttribute && (el.getAttribute('title') || '') + ' ' + (el.getAttribute('alt') || '') + ' ' +
             (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('name') || '') + ' ' +
             (el.getAttribute('data-game') || '') + ' ' + (el.getAttribute('data-title') || ''))).toLowerCase();
+          if (el.attributes) {
+            var ab = [];
+            for (var abi = 0; abi < el.attributes.length && abi < 40; abi++) {
+              var an = el.attributes[abi].name || '';
+              var av0 = el.attributes[abi].value || '';
+              if (av0.length > 2 && av0.length < 3000) ab.push(an + '=' + av0.slice(0, 400));
+            }
+            allAttrText = ab.join(' ').toLowerCase();
+          }
         } catch (e2) { continue; }
         var hitV = null;
-        for (var w = 0; w < v.length; w++) if (ident.indexOf(v[w]) > -1) { hitV = v[w]; break; }
+        for (var w = 0; w < v.length; w++) if (ident.indexOf(v[w]) > -1 || (allAttrText && allAttrText.indexOf(v[w]) > -1)) { hitV = v[w]; break; }
         var anchorHit = false;
         var anchorText = '';
         try {
           var tag = (el.tagName || '').toUpperCase();
-          if ((tag === 'A' || tag === 'BUTTON') && el.textContent) {
-            anchorText = el.textContent.slice(0, 200).toLowerCase();
-            for (var aw = 0; aw < v.length; aw++) if (anchorText.indexOf(v[aw]) > -1) { anchorHit = true; hitV = v[aw]; break; }
+          if ((tag === 'A' || tag === 'BUTTON' || tag === 'DIV' || tag === 'SPAN' || tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'P') && el.textContent) {
+            var tc = el.textContent;
+            if (tc.length < 800) {
+              anchorText = tc.slice(0, 300).toLowerCase();
+              for (var aw = 0; aw < v.length; aw++) if (anchorText.indexOf(v[aw]) > -1) { anchorHit = true; hitV = v[aw]; break; }
+            }
           }
         } catch (e3) { }
         if (!hitV && !anchorHit) continue;
         for (var a = 0; a < URL_ATTRS.length; a++) {
           var av = null;
           try { av = el.getAttribute && el.getAttribute(URL_ATTRS[a]); } catch (e4) { }
-          if (av && av.length > 3 && av.length < 2000 && !/^(#|javascript:|mailto:)/i.test(av.trim())) {
-            grabFinder(av, anchorHit ? 'link text' : 'dom tag', (anchorHit ? anchorText.slice(0, 120) : ident.slice(0, 120)), hitV || v[0], anchorHit ? 20 : 16, anchorHit ? 'link text' : 'dom match');
+          if (av && av.length > 3 && av.length < 4000 && !/^(#|javascript:|mailto:)/i.test(av.trim())) {
+            if (/srcset/i.test(URL_ATTRS[a])) {
+              var ss = extractSrcsetUrls(av);
+              for (var ssi = 0; ssi < ss.length; ssi++) grabFinder(ss[ssi], 'dom srcset', ident.slice(0, 120), hitV || v[0], 14, 'dom match');
+            } else if (av.length > 40 && av.indexOf('{') > -1) {
+              var emb = extractUrlsFromText(av);
+              for (var ebi = 0; ebi < emb.length && ebi < 6; ebi++) grabFinder(emb[ebi], 'dom json attr', ident.slice(0, 120), hitV || v[0], 16, 'dom match');
+            } else {
+              grabFinder(av, anchorHit ? 'link text' : 'dom tag', (anchorHit ? anchorText.slice(0, 120) : ident.slice(0, 120)), hitV || v[0], anchorHit ? 20 : 16, anchorHit ? 'link text' : 'dom match');
+            }
           }
         }
-        if (hitV && !anchorHit) {
+        try {
+          var ssAttr = el.getAttribute && (el.getAttribute('srcset') || el.getAttribute('data-srcset'));
+          if (ssAttr) {
+            var ssu = extractSrcsetUrls(ssAttr);
+            for (var si2 = 0; si2 < ssu.length; si2++) grabFinder(ssu[si2], 'dom srcset', ident.slice(0, 100), hitV || v[0], 14, 'dom match');
+          }
+          var stAttr = el.getAttribute && el.getAttribute('style');
+          if (stAttr && stAttr.indexOf('url(') > -1) {
+            var stu = extractCssUrls(stAttr);
+            for (var sti = 0; sti < stu.length; sti++) grabFinder(stu[sti], 'dom style', ident.slice(0, 100), hitV || v[0], 12, 'dom match');
+          }
+          if (el.attributes) {
+            for (var oai = 0; oai < el.attributes.length; oai++) {
+              var oan = (el.attributes[oai].name || '').toLowerCase();
+              if (oan.indexOf('on') === 0 && el.attributes[oai].value && el.attributes[oai].value.length > 10) {
+                var oh = el.attributes[oai].value;
+                var ohl = oh.toLowerCase();
+                var ohit = null;
+                for (var ohv = 0; ohv < v.length; ohv++) if (ohl.indexOf(v[ohv]) > -1) { ohit = v[ohv]; break; }
+                if (ohit || hitV) {
+                  var ohu = extractUrlsFromText(oh);
+                  for (var ohui = 0; ohui < ohu.length && ohui < 5; ohui++) grabFinder(ohu[ohui], 'event handler ' + oan, oh.slice(0, 140), ohit || hitV || v[0], 14, 'handler match');
+                }
+              }
+            }
+          }
+        } catch (e6) { }
+        if (hitV || anchorHit) {
           try {
-            var frames = el.querySelectorAll ? el.querySelectorAll('iframe[src], embed[src], object[data], a[href]') : [];
-            for (var f = 0; f < frames.length && f < 3; f++) {
+            var scope = el;
+            var up = 0;
+            while (scope && up < 2 && scope.parentElement) { scope = scope.parentElement; up++; }
+            var frames = (scope && scope.querySelectorAll) ? scope.querySelectorAll('iframe[src], embed[src], object[data], a[href], script[src]') : [];
+            for (var f = 0; f < frames.length && f < 5; f++) {
               var fv = frames[f].getAttribute('src') || frames[f].getAttribute('data') || frames[f].getAttribute('href');
-              if (fv) grabFinder(fv, 'named container', ident.slice(0, 120), hitV, 16, 'container match');
+              if (fv) grabFinder(fv, anchorHit ? 'near link text' : 'named container', (anchorHit ? anchorText.slice(0, 100) : ident.slice(0, 120)), hitV || v[0], 15, 'container match');
             }
           } catch (e5) { }
+        }
+      }
+    } catch (e) { }
+    try {
+      var tpls = document.querySelectorAll('template');
+      for (var ti = 0; ti < tpls.length && ti < 30; ti++) {
+        var thtml = '';
+        try {
+          thtml = tpls[ti].innerHTML || '';
+          if (!thtml && tpls[ti].content) {
+            var tc2 = tpls[ti].content;
+            var tdiv = document.createElement('div');
+            tdiv.appendChild(tc2.cloneNode(true));
+            thtml = tdiv.innerHTML || '';
+          }
+        } catch (e) { continue; }
+        if (!thtml || thtml.length > 400000) continue;
+        var thits = findHitPositions(thtml.toLowerCase(), v);
+        if (!thits.length) continue;
+        var tnear = urlsNearHits(thtml, thits, 2000);
+        for (var tni = 0; tni < tnear.length && tni < 12; tni++) {
+          grabFinder(tnear[tni].url, 'template', tnear[tni].snippet, tnear[tni].hit.variant, 15, 'template match');
+        }
+      }
+    } catch (e) { }
+    try {
+      var withShadow = [];
+      try {
+        var all2 = document.querySelectorAll('*');
+        for (var sh2 = 0; sh2 < all2.length && withShadow.length < 60; sh2++) {
+          if (all2[sh2].shadowRoot) withShadow.push(all2[sh2].shadowRoot);
+        }
+      } catch (e) { }
+      for (var shi = 0; shi < withShadow.length; shi++) {
+        try {
+          var sr = withShadow[shi];
+          var srHtml = sr.innerHTML || '';
+          if (!srHtml || srHtml.length > 400000) continue;
+          var srHits = findHitPositions(srHtml.toLowerCase(), v);
+          if (!srHits.length) continue;
+          var srNear = urlsNearHits(srHtml, srHits, 2000);
+          for (var sni = 0; sni < srNear.length && sni < 12; sni++) {
+            grabFinder(srNear[sni].url, 'shadow dom', srNear[sni].snippet, srNear[sni].hit.variant, 15, 'shadow match');
+          }
+          var srFrames = sr.querySelectorAll ? sr.querySelectorAll('iframe[src], embed[src], a[href], script[src]') : [];
+          for (var sfi = 0; sfi < srFrames.length && sfi < 6; sfi++) {
+            var sfu = srFrames[sfi].getAttribute('src') || srFrames[sfi].getAttribute('href');
+            if (sfu) grabFinder(sfu, 'shadow dom', 'shadow tree mentions name', v[0], 14, 'shadow match');
+          }
+        } catch (e) { }
+      }
+    } catch (e) { }
+    try {
+      var styles = document.querySelectorAll('style');
+      for (var sti2 = 0; sti2 < styles.length && sti2 < 40; sti2++) {
+        var cssT = styles[sti2].textContent || '';
+        if (!cssT || cssT.length > 300000) continue;
+        var cssHits = findHitPositions(cssT.toLowerCase(), v);
+        if (!cssHits.length) continue;
+        var cssU = extractCssUrls(cssT);
+        for (var cui = 0; cui < cssU.length && cui < 10; cui++) {
+          grabFinder(cssU[cui], 'css', snippetAround(cssT, cssHits[0].pos, cssHits[0].len), cssHits[0].variant, 10, 'css match');
         }
       }
     } catch (e) { }
@@ -1554,20 +1845,48 @@
       for (var s = 0; s < stores.length; s++) {
         var box = stores[s][1];
         if (!box) continue;
-        for (var k = 0; k < box.length && k < 200; k++) {
+        for (var k = 0; k < box.length && k < 300; k++) {
           var key = null;
           try { key = box.key(k); } catch (e2) { continue; }
           var val = '';
           try { val = String(box.getItem(key) || ''); } catch (e3) { continue; }
-          if (!val || val.length > 30000) continue;
-          var combo = String(key + ' ' + val).toLowerCase();
-          var sh = findHitPositions(combo, v);
-          if (!sh.length) continue;
-          var su = urlsNearHits(combo, sh, 1500);
-          for (var suI = 0; suI < su.length && suI < 10; suI++) {
-            grabFinder(su[suI].url, stores[s][0] + 'Storage', su[suI].snippet, su[suI].hit.variant, 14, 'storage match');
+          if (!val || val.length > 60000) continue;
+          var layersS = decodeLayers(String(key + ' ' + val).slice(0, 60000));
+          for (var lsi = 0; lsi < layersS.length; lsi++) {
+            var combo = layersS[lsi].text.toLowerCase();
+            var sh = findHitPositions(combo, v);
+            if (!sh.length) continue;
+            var su = urlsNearHits(combo, sh, 1500);
+            for (var suI = 0; suI < su.length && suI < 10; suI++) {
+              grabFinder(su[suI].url, stores[s][0] + 'Storage', su[suI].snippet, su[suI].hit.variant, 14, 'storage match');
+            }
           }
         }
+      }
+    } catch (e) { }
+    try {
+      var ck = '';
+      try { ck = document.cookie || ''; } catch (e) { ck = ''; }
+      if (ck) {
+        var ckh = findHitPositions(ck.toLowerCase(), v);
+        if (ckh.length) {
+          var cku = urlsNearHits(ck, ckh, 800);
+          for (var cki = 0; cki < cku.length && cki < 8; cki++) {
+            grabFinder(cku[cki].url, 'cookies', cku[cki].snippet, cku[cki].hit.variant, 12, 'cookie match');
+          }
+        }
+      }
+    } catch (e) { }
+    try {
+      var perf = [];
+      try { perf = performance.getEntriesByType ? performance.getEntriesByType('resource') : []; } catch (e) { perf = []; }
+      for (var pi = 0; pi < perf.length && pi < 500; pi++) {
+        var pname = String(perf[pi].name || '');
+        if (!pname) continue;
+        var pl = pname.toLowerCase();
+        var phit = null;
+        for (var pv = 0; pv < v.length; pv++) if (pl.indexOf(v[pv]) > -1) { phit = v[pv]; break; }
+        if (phit) grabFinder(pname, 'resource timing', pname.slice(0, 160), phit, 16, 'network match');
       }
     } catch (e) { }
     try {
@@ -1576,27 +1895,43 @@
       try {
         var wkeys = Object.getOwnPropertyNames(window);
         for (var wk = 0; wk < wkeys.length; wk++) {
-          if (/game|embed|iframe|rom|swf|wasm|build|arcade|loader|bundle|unity|godot|ejs|config|options|settings/i.test(wkeys[wk])) gkeys[wkeys[wk]] = 1;
+          if (/game|embed|iframe|rom|swf|wasm|build|arcade|loader|bundle|unity|godot|ejs|config|options|settings|data|state|store|app|portal|player/i.test(wkeys[wk])) gkeys[wkeys[wk]] = 1;
         }
       } catch (e) { }
-      var gList = Object.keys(gkeys).slice(0, 300);
+      var gList = Object.keys(gkeys).slice(0, 420);
       for (var gi = 0; gi < gList.length; gi++) {
         var gv = null;
         try { gv = window[gList[gi]]; } catch (e) { continue; }
-        if (!gv) continue;
-        if (typeof gv === 'string') {
-          if (gv.length > 20000) continue;
-          var gl = gv.toLowerCase();
-          var ghit = null;
-          for (var gh = 0; gh < v.length; gh++) if (gl.indexOf(v[gh]) > -1) { ghit = v[gh]; break; }
-          if (!ghit) continue;
-          var gu = extractUrlsFromText(gv);
-          for (var guI = 0; guI < gu.length && guI < 6; guI++) {
-            grabFinder(gu[guI], 'window.' + gList[gi], gv.slice(0, 160), ghit, 16, 'global match');
+        if (gv == null) continue;
+        if (typeof gv === 'function') {
+          var fsrc = '';
+          try { fsrc = Function.prototype.toString.call(gv).slice(0, 60000); } catch (e) { continue; }
+          if (!fsrc) continue;
+          var fl2 = fsrc.toLowerCase();
+          var fhit = null;
+          for (var fh2 = 0; fh2 < v.length; fh2++) if (fl2.indexOf(v[fh2]) > -1) { fhit = v[fh2]; break; }
+          if (!fhit) continue;
+          var fhh = findHitPositions(fl2, v);
+          var fun = urlsNearHits(fsrc, fhh, 1500);
+          for (var fui2 = 0; fui2 < fun.length && fui2 < 8; fui2++) {
+            grabFinder(fun[fui2].url, 'window.' + gList[gi] + '()', fun[fui2].snippet, fun[fui2].hit.variant, 15, 'function match');
+          }
+        } else if (typeof gv === 'string') {
+          if (gv.length > 50000) continue;
+          var layersG = decodeLayers(gv.slice(0, 50000));
+          for (var lgi = 0; lgi < layersG.length; lgi++) {
+            var gl = layersG[lgi].text.toLowerCase();
+            var ghit = null;
+            for (var gh = 0; gh < v.length; gh++) if (gl.indexOf(v[gh]) > -1) { ghit = v[gh]; break; }
+            if (!ghit) continue;
+            var gu = extractUrlsFromText(layersG[lgi].text);
+            for (var guI = 0; guI < gu.length && guI < 8; guI++) {
+              grabFinder(gu[guI], 'window.' + gList[gi], layersG[lgi].text.slice(0, 160), ghit, 16, 'global match');
+            }
           }
         } else if (typeof gv === 'object') {
           var js = '';
-          try { js = JSON.stringify(gv).slice(0, 120000); } catch (e) { continue; }
+          try { js = JSON.stringify(gv).slice(0, 200000); } catch (e) { continue; }
           if (!js) continue;
           var jl = js.toLowerCase();
           var jhit = null;
@@ -1604,8 +1939,12 @@
           if (!jhit) continue;
           var jo = [];
           try { walkJson(gv, jo, 0); } catch (e) { continue; }
-          for (var joI = 0; joI < jo.length && joI < 12; joI++) {
+          for (var joI = 0; joI < jo.length && joI < 16; joI++) {
             grabFinder(jo[joI], 'window.' + gList[gi], 'object mentions name', jhit, 16, 'global match');
+          }
+          var jnear = urlsNearHits(js, findHitPositions(jl, v), 1500);
+          for (var jni = 0; jni < jnear.length && jni < 8; jni++) {
+            grabFinder(jnear[jni].url, 'window.' + gList[gi], jnear[jni].snippet, jnear[jni].hit.variant, 16, 'global match');
           }
         }
       }
@@ -1663,21 +2002,54 @@
     } catch (e) { }
     try {
       var frs = document.querySelectorAll('iframe');
-      for (var fi = 0; fi < frs.length && fi < 20; fi++) {
+      for (var fi = 0; fi < frs.length && fi < 24; fi++) {
         var fdoc = null;
         try { fdoc = frs[fi].contentDocument; } catch (e) { continue; }
         if (!fdoc || !fdoc.documentElement) continue;
         try {
-          var fhtml = fdoc.documentElement.outerHTML || '';
-          if (!fhtml || fhtml.length > 800000) continue;
-          var fl = fhtml.toLowerCase();
-          var fhit = null;
-          for (var fh = 0; fh < v.length; fh++) if (fl.indexOf(v[fh]) > -1) { fhit = v[fh]; break; }
-          if (!fhit) continue;
-          var furls = extractUrlsFromText(fhtml.slice(0, 400000));
-          for (var fui = 0; fui < furls.length && fui < 10; fui++) {
-            grabFinder(furls[fui], 'iframe document', 'same-origin frame mentions name', fhit, 16, 'frame match');
+          var fscripts = fdoc.querySelectorAll('script:not([src])');
+          for (var fsi = 0; fsi < fscripts.length && fsi < 60; fsi++) {
+            var fst = fscripts[fsi].textContent || '';
+            if (!fst || fst.length > 500000) continue;
+            var flayers = decodeLayers(joinSplitStrings(fst));
+            for (var fli = 0; fli < flayers.length; fli++) {
+              var fhits = findHitPositions(flayers[fli].text.toLowerCase(), v);
+              if (!fhits.length) continue;
+              var fnear = urlsNearHits(flayers[fli].text, fhits, 2000);
+              for (var fni = 0; fni < fnear.length && fni < 10; fni++) {
+                grabFinder(fnear[fni].url, 'iframe js', fnear[fni].snippet, fnear[fni].hit.variant, 17, 'frame match', (frs[fi].src || document.baseURI));
+              }
+            }
           }
+        } catch (e) { }
+        try {
+          var fhtml = fdoc.documentElement.outerHTML || '';
+          if (!fhtml || fhtml.length > 900000) continue;
+          var flayers2 = decodeLayers(fhtml.slice(0, 500000));
+          for (var fl2i = 0; fl2i < flayers2.length; fl2i++) {
+            var fhh2 = findHitPositions(flayers2[fl2i].text.toLowerCase(), v);
+            if (!fhh2.length) continue;
+            var fnear2 = urlsNearHits(flayers2[fl2i].text, fhh2, 2000);
+            for (var fn2 = 0; fn2 < fnear2.length && fn2 < 12; fn2++) {
+              grabFinder(fnear2[fn2].url, 'iframe document', fnear2[fn2].snippet, fnear2[fn2].hit.variant, 16, 'frame match', (frs[fi].src || document.baseURI));
+            }
+          }
+          try {
+            var nested = fdoc.querySelectorAll('iframe');
+            for (var ni = 0; ni < nested.length && ni < 6; ni++) {
+              var ndoc = null;
+              try { ndoc = nested[ni].contentDocument; } catch (e) { continue; }
+              if (!ndoc || !ndoc.documentElement) continue;
+              var nhtml = (ndoc.documentElement.outerHTML || '').slice(0, 300000);
+              if (!nhtml) continue;
+              var nh = findHitPositions(nhtml.toLowerCase(), v);
+              if (!nh.length) continue;
+              var nn = urlsNearHits(nhtml, nh, 1500);
+              for (var nni = 0; nni < nn.length && nni < 8; nni++) {
+                grabFinder(nn[nni].url, 'nested iframe', nn[nni].snippet, nn[nni].hit.variant, 15, 'frame match');
+              }
+            }
+          } catch (e) { }
         } catch (e) { }
       }
     } catch (e) { }
@@ -1700,17 +2072,29 @@
   function runFinderDeep(token) {
     var v = state.findVariants;
     if (!v.length) return;
+    var visited = {};
     var scripts = [];
     try {
       var nodes = document.querySelectorAll('script[src]');
-      for (var i = 0; i < nodes.length && scripts.length < 15; i++) {
+      var seenS = {};
+      for (var i = 0; i < nodes.length && scripts.length < 25; i++) {
         var src = nodes[i].getAttribute('src') || '';
         if (!src) continue;
         var abs = resolveUrl(unwrap(src));
-        if (!abs || !/^https?:/.test(abs)) continue;
+        if (!abs || !/^https?:/.test(abs) || seenS[abs]) continue;
         if (NOISE_RE.test(abs.toLowerCase())) continue;
+        seenS[abs] = 1;
         scripts.push(abs);
       }
+      try {
+        var links = document.querySelectorAll('link[rel*="preload"][href], link[rel*="modulepreload"][href]');
+        for (var li2 = 0; li2 < links.length && scripts.length < 28; li2++) {
+          var lh = links[li2].getAttribute('href') || '';
+          if (!/\.js(\?|#|$)/i.test(lh)) continue;
+          var labs = resolveUrl(unwrap(lh));
+          if (labs && /^https?:/.test(labs) && !seenS[labs] && !NOISE_RE.test(labs.toLowerCase())) { seenS[labs] = 1; scripts.push(labs); }
+        }
+      } catch (e) { }
       scripts.sort(function (a, b) {
         var al = a.toLowerCase(), bl = b.toLowerCase();
         var an = 0, bn = 0;
@@ -1720,20 +2104,20 @@
         try { ah = new URL(a).origin === location.origin ? 1 : 0; bh = new URL(b).origin === location.origin ? 1 : 0; } catch (e) { }
         return bh - ah;
       });
-      scripts = scripts.slice(0, 10);
+      scripts = scripts.slice(0, 20);
     } catch (e) { scripts = []; }
     var pages = [];
     try {
       var sorted = items.slice().sort(function (a, b) { return b.score - a.score; });
       var seenP = {};
-      for (var p = 0; p < sorted.length && pages.length < 12; p++) {
+      for (var p = 0; p < sorted.length && pages.length < 18; p++) {
         var u = sorted[p].url;
         if (!/^https?:/.test(u) || seenP[u]) continue;
-        if (/\.(png|jpe?g|gif|webp|avif|svgz?|ico|css|woff2?|ttf|mp4|mp3|wav|map)(\?|#|$)/i.test(u)) continue;
+        if (/\.(png|jpe?g|gif|webp|avif|svgz?|ico|css|woff2?|ttf|otf|mp4|webm|mp3|ogg|wav|map)(\?|#|$)/i.test(u)) continue;
         seenP[u] = 1;
         pages.push(u);
       }
-      for (var q = 0; q < items.length && pages.length < 16; q++) {
+      for (var q = 0; q < items.length && pages.length < 24; q++) {
         var uu = items[q].url.toLowerCase();
         var hasV = false;
         for (var qv = 0; qv < v.length; qv++) if (uu.indexOf(v[qv]) > -1) { hasV = true; break; }
@@ -1741,15 +2125,22 @@
       }
     } catch (e) { pages = []; }
     var jobs = [];
-    for (var s = 0; s < scripts.length; s++) jobs.push({ kind: 'js', url: scripts[s] });
-    for (var pg = 0; pg < pages.length; pg++) jobs.push({ kind: 'page', url: pages[pg] });
-    if (!jobs.length) { finishDeep(token, 0, 0); return; }
+    for (var s = 0; s < scripts.length; s++) { visited['js|' + scripts[s]] = 1; jobs.push({ kind: 'js', url: scripts[s], depth: 0 }); }
+    for (var pg = 0; pg < pages.length; pg++) { visited['page|' + pages[pg]] = 1; jobs.push({ kind: 'page', url: pages[pg], depth: 0 }); }
+    if (!jobs.length) { finishDeep(token, 0, 0, 0); return; }
     state.findProgress = { phase: 'deep', done: 0, total: jobs.length };
     render();
-    var idx = 0, active = 0, jsHits = 0, verified = 0;
+    var idx = 0, active = 0, jsHits = 0, verified = 0, extraFound = 0;
+    function enqueue(kind, url, depth) {
+      if (!url || visited[kind + '|' + url]) return;
+      if (jobs.length >= 60) return;
+      visited[kind + '|' + url] = 1;
+      jobs.push({ kind: kind, url: url, depth: depth || 1 });
+      state.findProgress.total = jobs.length;
+    }
     function pump() {
       if (token !== state.findToken) return;
-      while (active < 3 && idx < jobs.length) {
+      while (active < 4 && idx < jobs.length) {
         var job = jobs[idx++];
         active++;
         runOne(job).then(function () {
@@ -1757,41 +2148,99 @@
           state.findProgress.done++;
           render();
           pump();
-          if (state.findProgress.done >= jobs.length && active <= 0) finishDeep(token, jsHits, verified);
+          if (state.findProgress.done >= jobs.length && active <= 0) finishDeep(token, jsHits, verified, extraFound);
         });
       }
     }
     function runOne(job) {
-      return fetchTextSmart(job.url, 9000).then(function (body) {
+      return fetchTextSmart(job.url, job.kind === 'map' ? 9000 : 10000).then(function (body) {
         if (token !== state.findToken) return;
         if (!body || body.length < 80) return;
+        if (job.kind === 'map') {
+          try {
+            var map = JSON.parse(body);
+            var sources = map.sourcesContent || map.sources || [];
+            var joinedMap = '';
+            if (Array.isArray(sources)) {
+              for (var mi = 0; mi < sources.length && mi < 200; mi++) {
+                if (typeof sources[mi] === 'string') joinedMap += '\n' + sources[mi].slice(0, 60000);
+              }
+            }
+            if (!joinedMap) {
+              var names = Array.isArray(map.names) ? map.names.join(' ') : '';
+              joinedMap = names + ' ' + (Array.isArray(map.sources) ? map.sources.join(' ') : '');
+            }
+            var mhits = findHitPositions(joinedMap.toLowerCase(), v);
+            if (!mhits.length) return;
+            jsHits++;
+            var mnear = urlsNearHits(joinedMap, mhits, 2000);
+            var mshort = '';
+            try { mshort = hostOf(job.url) + new URL(job.url).pathname.slice(-40); } catch (e) { mshort = job.url.slice(-60); }
+            for (var mn = 0; mn < mnear.length && mn < 20; mn++) {
+              grabFinder(mnear[mn].url, 'sourcemap ' + mshort, mnear[mn].snippet, mnear[mn].hit.variant, 16, 'sourcemap match', job.url);
+            }
+            reevaluate();
+            render();
+          } catch (e) { }
+          return;
+        }
         if (job.kind === 'js') {
-          var joined = joinSplitStrings(body);
-          var tl = joined.toLowerCase();
-          var hits = findHitPositions(tl, v);
-          if (!hits.length) return;
-          jsHits++;
+          var minified = (body.match(/\n/g) || []).length < 30 && body.length > 80000;
+          var radius = minified ? 8000 : 2500;
+          var layers = decodeLayers(joinSplitStrings(body));
+          try {
+            var atobs = extractAtobPayloads(body.slice(0, 600000));
+            for (var abi = 0; abi < atobs.length; abi++) layers.push({ text: atobs[abi], label: 'atob' });
+          } catch (e) { }
+          var foundAny = false;
           var short = '';
           try { short = hostOf(job.url) + new URL(job.url).pathname.slice(-40); } catch (e) { short = job.url.slice(-60); }
-          var near = urlsNearHits(joined, hits, 2000);
-          for (var n = 0; n < near.length && n < 20; n++) {
-            grabFinder(near[n].url, 'js file ' + short, near[n].snippet, near[n].hit.variant, 15, 'code match', job.url);
+          for (var li = 0; li < layers.length; li++) {
+            var tl = layers[li].text.toLowerCase();
+            var hits = findHitPositions(tl, v);
+            if (!hits.length) continue;
+            foundAny = true;
+            var tag = layers[li].label ? 'js ' + short + ' ' + layers[li].label : 'js file ' + short;
+            var near = urlsNearHits(layers[li].text, hits, radius);
+            for (var n = 0; n < near.length && n < 24; n++) {
+              grabFinder(near[n].url, tag, near[n].snippet, near[n].hit.variant, 15, 'code match', job.url);
+            }
+          }
+          if (foundAny) jsHits++;
+          try {
+            var b64u = b64UrlsFromText(body.slice(0, 500000));
+            for (var bi = 0; bi < b64u.length && bi < 10; bi++) {
+              grabFinder(b64u[bi], 'js b64 ' + short, 'encoded url in ' + short, v[0], 13, 'encoded match', job.url);
+            }
+          } catch (e) { }
+          if ((job.depth || 0) < 1) {
+            try {
+              var mapUrl = sourceMapUrl(body.slice(-8000) + '\n' + body.slice(0, 2000), job.url);
+              if (mapUrl) { enqueue('map', mapUrl, 1); extraFound++; }
+            } catch (e) { }
+            try {
+              var chunks = extractJsChunkUrls(body.slice(0, 400000), job.url);
+              for (var ci = 0; ci < chunks.length && ci < 6; ci++) { enqueue('js', chunks[ci], 1); extraFound++; }
+            } catch (e) { }
           }
           reevaluate();
           render();
         } else {
-          var title = '', h1 = '', og = '', bodyText = '';
+          var title = '', h1 = '', og = '', bodyText = '', metaDesc = '';
           var low = '';
+          var doc = null;
           try {
-            var doc = new DOMParser().parseFromString(body, 'text/html');
+            doc = new DOMParser().parseFromString(body, 'text/html');
             title = (doc.title || '').trim();
             var h1el = doc.querySelector('h1');
             h1 = h1el ? (h1el.textContent || '').trim().slice(0, 160) : '';
-            var ogel = doc.querySelector('meta[property="og:title"]');
+            var ogel = doc.querySelector('meta[property="og:title"], meta[name="twitter:title"]');
             og = ogel ? (ogel.getAttribute('content') || '').trim().slice(0, 160) : '';
-            bodyText = doc.body ? (doc.body.textContent || '').slice(0, 60000) : '';
+            var descEl = doc.querySelector('meta[name="description"], meta[property="og:description"]');
+            metaDesc = descEl ? (descEl.getAttribute('content') || '').trim().slice(0, 200) : '';
+            bodyText = doc.body ? (doc.body.textContent || '').slice(0, 80000) : '';
             low = body.toLowerCase();
-          } catch (e) { low = String(body).toLowerCase().slice(0, 400000); }
+          } catch (e) { low = String(body).toLowerCase().slice(0, 500000); }
           var titleHit = null;
           if (title) {
             var tll = title.toLowerCase();
@@ -1801,23 +2250,27 @@
             verified++;
             addNameHit(job.url, 'page title', title.slice(0, 160), titleHit, 40, 'title match');
           } else {
-            var combined = (title + ' ' + h1 + ' ' + og).toLowerCase();
+            var combined = (title + ' ' + h1 + ' ' + og + ' ' + metaDesc).toLowerCase();
             var hHit = null;
             for (var hh = 0; hh < v.length; hh++) if (combined.indexOf(v[hh]) > -1) { hHit = v[hh]; break; }
             if (hHit) {
               verified++;
-              addNameHit(job.url, 'page heading', (h1 || og || title).slice(0, 160), hHit, 25, 'heading match');
+              var hsrc = h1 && h1.toLowerCase().indexOf(hHit) > -1 ? h1 : (og && og.toLowerCase().indexOf(hHit) > -1 ? og : metaDesc);
+              addNameHit(job.url, 'page heading', (hsrc || title).slice(0, 160), hHit, 25, 'heading match');
             } else {
               var bt = (bodyText || '').toLowerCase();
               var count = 0;
+              var distinct = {};
               for (var bc = 0; bc < v.length; bc++) {
                 var at = 0, g = 0;
-                while (g++ < 12) { var ix = bt.indexOf(v[bc], at); if (ix === -1) break; count++; at = ix + v[bc].length; }
+                while (g++ < 16) { var ix = bt.indexOf(v[bc], at); if (ix === -1) break; count++; distinct[v[bc]] = 1; at = ix + v[bc].length; }
               }
-              if (count >= 2) {
-                addNameHit(job.url, 'page body', 'mentions name ' + count + 'x', v[0], 18, 'body match');
-              } else if (count === 1 || low.indexOf(v[0]) > -1) {
-                addNameHit(job.url, 'page code', 'mentions name', v[0], 10, 'code mention');
+              var dCount = Object.keys(distinct).length;
+              if (count >= 3 || (count >= 2 && dCount >= 2)) {
+                addNameHit(job.url, 'page body', 'mentions name ' + count + 'x', v[0], 20, 'body match');
+              } else if (count >= 1 || low.indexOf(v[0]) > -1) {
+                var multi = dCount >= 2 ? 14 : 10;
+                addNameHit(job.url, 'page code', 'mentions name', v[0], multi, 'code mention');
               } else if (title && title.split(/\s+/).length >= 2) {
                 var ov = wordsOverlap(state.findName, title);
                 if (ov.total > 0 && ov.hit === 0) {
@@ -1826,17 +2279,69 @@
               }
             }
           }
-          var mentions = low.indexOf(v[0]) > -1 || (v[1] && low.indexOf(v[1]) > -1);
+          var mentions = low.indexOf(v[0]) > -1 || (v[1] && low.indexOf(v[1]) > -1) || (v[2] && low.indexOf(v[2]) > -1);
           if (mentions) {
             try {
-              var doc2 = new DOMParser().parseFromString(body, 'text/html');
-              var frames = doc2.querySelectorAll('iframe[src], embed[src], object[data]');
-              for (var f = 0; f < frames.length && f < 6; f++) {
+              var doc2 = doc || new DOMParser().parseFromString(body, 'text/html');
+              var frames = doc2.querySelectorAll('iframe[src], embed[src], object[data], video[src], source[src]');
+              for (var f = 0; f < frames.length && f < 8; f++) {
                 var fu = frames[f].getAttribute('src') || frames[f].getAttribute('data');
                 if (fu) grabFinder(fu, 'inside ' + hostOf(job.url), 'parent mentions name', v[0], 14, 'nested match', job.url);
               }
+              var inScripts = doc2.querySelectorAll('script:not([src])');
+              var inlineAll = '';
+              for (var isi = 0; isi < inScripts.length && isi < 40; isi++) inlineAll += '\n' + (inScripts[isi].textContent || '').slice(0, 80000);
+              if (inlineAll) {
+                var inHits = findHitPositions(inlineAll.toLowerCase(), v);
+                if (inHits.length) {
+                  var inNear = urlsNearHits(inlineAll, inHits, 2000);
+                  for (var ini = 0; ini < inNear.length && ini < 12; ini++) {
+                    grabFinder(inNear[ini].url, 'inside ' + hostOf(job.url), inNear[ini].snippet, inNear[ini].hit.variant, 15, 'nested match', job.url);
+                  }
+                }
+              }
+              var ld2 = doc2.querySelectorAll('script[type="application/ld+json"]');
+              for (var ld2i = 0; ld2i < ld2.length; ld2i++) {
+                try {
+                  var lo2 = JSON.parse(ld2[ld2i].textContent || '{}');
+                  var ls2 = JSON.stringify(lo2).toLowerCase();
+                  var lh2 = null;
+                  for (var lhv = 0; lhv < v.length; lhv++) if (ls2.indexOf(v[lhv]) > -1) { lh2 = v[lhv]; break; }
+                  if (!lh2) continue;
+                  var lw = [];
+                  walkJson(lo2, lw, 0);
+                  for (var lwi = 0; lwi < lw.length && lwi < 10; lwi++) {
+                    grabFinder(lw[lwi], 'inside ' + hostOf(job.url), 'schema mentions name', lh2, 16, 'nested match', job.url);
+                  }
+                } catch (e) { }
+              }
+              if ((job.depth || 0) < 1) {
+                var pscripts = doc2.querySelectorAll('script[src]');
+                for (var psi = 0; psi < pscripts.length && psi < 12; psi++) {
+                  var psrc = pscripts[psi].getAttribute('src') || '';
+                  if (!psrc) continue;
+                  var pabs = resolveUrl(psrc, job.url);
+                  if (pabs && /^https?:/.test(pabs) && !NOISE_RE.test(pabs.toLowerCase())) { enqueue('js', pabs, 1); extraFound++; }
+                }
+                var plinks = doc2.querySelectorAll('a[href]');
+                for (var pli = 0; pli < plinks.length && pli < 80; pli++) {
+                  var phref = plinks[pli].getAttribute('href') || '';
+                  var ptxt = (plinks[pli].textContent || '').toLowerCase().slice(0, 200);
+                  var plhit = null;
+                  for (var plv = 0; plv < v.length; plv++) if (phref.toLowerCase().indexOf(v[plv]) > -1 || ptxt.indexOf(v[plv]) > -1) { plhit = v[plv]; break; }
+                  if (!plhit) continue;
+                  var plabs = resolveUrl(phref, job.url);
+                  if (plabs && /^https?:/.test(plabs)) { enqueue('page', plabs, 1); extraFound++; }
+                  if (extraFound > 24) break;
+                }
+              }
             } catch (e) { }
           }
+          try {
+            if (/unity|godot|construct|gdevelop|ruffle|emulator|phaser|pixi|three|babylon/i.test(low.slice(0, 200000))) {
+              addNameHit(job.url, 'page code', 'engine marker present', v[0], 4, 'engine signal');
+            }
+          } catch (e) { }
           reevaluate();
           render();
         }
@@ -1845,13 +2350,13 @@
     pump();
   }
 
-  function finishDeep(token, jsHits, verified) {
+  function finishDeep(token, jsHits, verified, extraFound) {
     if (token !== state.findToken) return;
     state.findBusy = false;
     state.findProgress = { phase: '', done: 0, total: 0 };
     var n = namedCount();
-    state.findMsg = { ok: n > 0, n: n, verified: verified, jsHits: jsHits };
-    log('find deep done: ' + n + ' named, ' + verified + ' title-verified, ' + jsHits + ' js hits');
+    state.findMsg = { ok: n > 0, n: n, verified: verified, jsHits: jsHits, extra: extraFound || 0 };
+    log('find deep done: ' + n + ' named, ' + verified + ' title-verified, ' + jsHits + ' js hits, +' + (extraFound || 0) + ' crawled');
     reevaluate();
     render();
     toast(n > 0
@@ -1871,9 +2376,7 @@
     findEvidence = {};
     state.findBusy = true;
     state.findProgress = { phase: 'local', done: 0, total: 0 };
-    var keepFilter = !!(opts && opts.keepFilter);
-    var quiet = !!(opts && opts.quiet);
-    if (!keepFilter) state.filter = 'name';
+    state.filter = 'name';
     render();
     var addedLocal = 0;
     try { addedLocal = runFinderLocal(); } catch (e) { addedLocal = 0; }
@@ -1887,11 +2390,11 @@
       state.findBusy = false;
       state.findProgress = { phase: '', done: 0, total: 0 };
       render();
-      if (!quiet) toast(nLocal > 0 ? nLocal + ' matches for "' + nm + '"' : 'No source matched "' + nm + '" — try the exact slug');
+      toast(nLocal > 0 ? nLocal + ' matches for "' + nm + '"' : 'No source matched "' + nm + '" — try the exact slug');
       return;
     }
     toast('Deep search: reading source files…');
-    try { runFinderDeep(token); } catch (e) { finishDeep(token, 0, 0); }
+    try { runFinderDeep(token); } catch (e) { finishDeep(token, 0, 0, 0); }
   }
 
   function detailHtml(it) {
@@ -2042,15 +2545,18 @@
         '<div class="gex-sw' + (settings[s[0]] ? ' on' : '') + '" data-act="opt" data-key="' + s[0] + '" role="switch" aria-checked="' +
         !!settings[s[0]] + '"><i></i></div></div>';
     }
-    return '<div class="gex-set"><div class="gex-panel"><h4>Filters</h4>' + rows +
+    return '<div class="gex-settings-nav">' +
+      '<button class="gex-settings-back" data-act="settings-back" title="Back to results">' + ICONS.back + '</button>' +
+      '<div><h2>Settings</h2><p>Scanning, ranking and appearance</p></div>' +
+      '<button class="gex-btn ghost" data-act="reset" style="margin-left:auto">Defaults</button></div>' +
+      '<div class="gex-set"><div class="gex-panel"><h4>Detection & appearance</h4>' + rows +
       '<div class="gex-opt"><span class="lbl">Minimum score<span class="sub">Lower = noisier</span></span>' +
       '<div class="gex-num"><input type="range" min="-20" max="90" step="5" value="' + settings.minScore +
       '" data-act="range" aria-label="Minimum score"><output>' + settings.minScore + '</output></div></div>' +
       '<div class="gex-row" style="margin-top:8px">' +
       '<button class="gex-btn" style="flex:1;justify-content:center" data-act="rescan">' + ICONS.refresh + 'Re-scan now</button>' +
-      '<button class="gex-btn ghost" data-act="reset">Defaults</button>' +
-      '</div>' +
-      '<div class="gex-log"><div class="t">Activity</div>' +
+      '</div></div>' +
+      '<div class="gex-panel"><h4>Activity</h4><div class="gex-log" style="margin-top:0;border-top:0;padding-top:0">' +
       (logLines.length
         ? logLines.slice(0, 6).map(function (l) { return '<div class="l">' + esc(l) + '</div>'; }).join('')
         : '<div class="l" style="color:#55555c">quiet so far</div>') +
@@ -2075,13 +2581,14 @@
       '<span style="margin-left:auto;display:flex;gap:6px;align-items:center">' +
       '<button class="gex-iconbtn' + (state.favOnly ? ' on' : '') + '" data-act="favonly" title="Pinned only">' + (state.favOnly ? ICONS.starOn : ICONS.star) + '</button>' +
       '<button class="gex-iconbtn' + (state.findName ? ' on gex-find' : '') + '" data-act="find" title="Find a build by name (Alt+F)">' + ICONS.target + '</button>' +
-      '<button class="gex-iconbtn" data-act="settings" title="Filters">' + ICONS.gear + '</button>' +
+      '<button class="gex-iconbtn' + (state.view === 'settings' ? ' gex-settings-active' : '') + '" data-act="settings" title="Settings">' + ICONS.gear + '</button>' +
       '</span></div>' +
+      '<div data-results class="gex-view">' +
       '<div class="gex-tool">' +
       '<div data-find>' + findRowHtml() + '</div>' +
       '<div class="gex-row">' +
       '<label class="gex-field">' + ICONS.search +
-      '<input type="text" data-query placeholder="Search sources, hosts, engines…  ( / )" spellcheck="false" aria-label="Search results and page sources" title="Typing filters + sweeps page sources · Enter deep-searches files" value="' + esc(state.query) + '"></label>' +
+      '<input type="text" data-query placeholder="Filter by host, engine, source…  ( / )" spellcheck="false" aria-label="Filter results" value="' + esc(state.query) + '"></label>' +
       sortSeg() +
       '</div>' +
       '<div class="gex-row"><div data-tabs style="flex:1;min-width:0">' + tabsHtml() + '</div>' +
@@ -2091,15 +2598,30 @@
       '</div>' +
       '<div class="gex-meta"><span>host <b>' + esc(CURRENT_HOST || 'sandbox') + '</b></span>' +
       '<span><b data-count>' + filtered().length + '</b> shown · <b>' + items.length + '</b> kept · <b>' + stats.imgBlocked + '</b> images blocked</span></div>' +
-      '<div class="gex-body" data-body>' + listHtml() + '</div>' +
-      '<div data-settings data-open="0"></div>' +
-      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>Alt</kbd><kbd>F</kbd> find <span style="width:10px"></span><kbd>↵</kbd> search <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
+      '<div class="gex-body" data-body>' + listHtml() + '</div></div>' +
+      '<div data-settings class="gex-settings-page" style="display:none"></div>' +
+      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>Alt</kbd><kbd>F</kbd> find <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
       '<span style="margin-left:auto;font-size:10px;color:#6a6a70">authorised sites only</span></div>';
+  }
+
+  function syncView(host) {
+    if (!host) return;
+    var isSettings = state.view === 'settings';
+    var results = host.querySelector('[data-results]');
+    var settingsPage = host.querySelector('[data-settings]');
+    var settingsButton = host.querySelector('[data-act="settings"]');
+    if (results) results.style.display = isSettings ? 'none' : '';
+    if (settingsPage) {
+      settingsPage.style.display = isSettings ? 'block' : 'none';
+      if (isSettings) settingsPage.innerHTML = settingsHtml();
+    }
+    if (settingsButton) settingsButton.classList.toggle('gex-settings-active', isSettings);
   }
 
   function render() {
     var host = document.getElementById(ROOT_ID);
     if (!host) return;
+    syncView(host);
     host.classList.toggle('compact', !!settings.compact);
     var list = filtered();
     var meta = host.querySelector('.gex-meta span:last-child');
@@ -2235,21 +2757,10 @@
           return;
         }
         if (e.target.hasAttribute('data-query')) {
-          if (e.shiftKey) {
-            var top = filtered();
-            if (!top.length) return;
-            openTheater(top[0].url);
-            return;
-          }
-          if (e.metaKey || e.ctrlKey) {
-            var top2 = filtered();
-            if (!top2.length) return;
-            openUrl(top2[0].url);
-            return;
-          }
-          e.preventDefault();
-          var q = (e.target.value || '').trim();
-          runFinder(q || deriveName(), { keepFilter: true });
+          var top = filtered();
+          if (!top.length) return;
+          if (e.shiftKey) openTheater(top[0].url);
+          else openUrl(top[0].url);
         }
       }
     });
@@ -2475,11 +2986,14 @@
     if (act === 'min') { setMinimised(true); return; }
 
     if (act === 'settings') {
-      var wrap = host.querySelector('[data-settings]');
-      if (!wrap) return;
-      var opening = wrap.getAttribute('data-open') !== '1';
-      wrap.setAttribute('data-open', opening ? '1' : '0');
-      wrap.innerHTML = opening ? settingsHtml() : '';
+      state.view = state.view === 'settings' ? 'results' : 'settings';
+      syncView(host);
+      return;
+    }
+
+    if (act === 'settings-back') {
+      state.view = 'results';
+      syncView(host);
       return;
     }
 
@@ -2504,8 +3018,6 @@
 
     if (act === 'reset') {
       settings = clone(DEFAULTS); store();
-      var wrap2 = host.querySelector('[data-settings]');
-      if (wrap2) wrap2.innerHTML = settingsHtml();
       items = []; seen = {}; state.expanded = 0; state.favOnly = false;
       stats.seen = 0; stats.imgBlocked = 0; stats.staticBlocked = 0;
       scanAll('reset');
@@ -2637,22 +3149,6 @@
     if (t.hasAttribute('data-query')) {
       state.query = t.value;
       render();
-      clearTimeout(onInput._q);
-      onInput._q = setTimeout(function () {
-        var q = (state.query || '').trim();
-        if (q.length >= 3) {
-          if (!state.findName || state.findName.toLowerCase() !== q.toLowerCase()) {
-            try { runFinder(q, { deep: false, keepFilter: true, quiet: true }); } catch (e) { }
-          }
-        } else if (q.length === 0 && state.findName && !state.findBusy) {
-          state.findToken = (state.findToken || 0) + 1;
-          state.findName = ''; state.findVariants = []; state.findWords = [];
-          state.findMsg = null; state.findInput = '';
-          findEvidence = {};
-          if (state.filter === 'name') state.filter = 'all';
-          reevaluate(); render();
-        }
-      }, 700);
       return;
     }
     if (t.getAttribute('data-act') === 'range') {
@@ -2744,11 +3240,6 @@
         return ev && ev.findName === state.findName ? ev : null;
       } catch (e) { return null; }
     },
-    search: function (name, deep) {
-      state.findOpen = true;
-      render();
-      runFinder(name, { keepFilter: true, deep: deep !== false });
-    },
     named: function () { return items.filter(function (i) { return namedMatch(i); }).map(function (i) { return i.url; }); },
     favorites: function () { return Object.keys(favs); },
     theater: function (u) { openTheater(u || (filtered()[0] && filtered()[0].url)); },
@@ -2762,6 +3253,7 @@
       e.preventDefault();
       var root = document.getElementById(ROOT_ID);
       if (root && !state.min) {
+        state.view = 'results';
         state.findOpen = true;
         render();
         var fi = root.querySelector('[data-finder]');
@@ -2775,6 +3267,8 @@
       var root2 = document.getElementById(ROOT_ID);
       if (root2 && !state.min) {
         e.preventDefault();
+        state.view = 'results';
+        syncView(root2);
         var q = root2.querySelector('[data-query]');
         if (q) q.focus();
       }
@@ -2782,6 +3276,12 @@
     }
     if (e.key === 'Escape') {
       if (document.getElementById('gex-theater')) { closeTheater(); return; }
+      var root3 = document.getElementById(ROOT_ID);
+      if (root3 && state.view === 'settings') {
+        state.view = 'results';
+        syncView(root3);
+        return;
+      }
       if (!state.min && document.getElementById(ROOT_ID)) setMinimised(true);
     }
   }
