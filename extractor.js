@@ -1,11 +1,11 @@
 /*!
- * Game Extractor v3.4 — surface the playable build behind a game page.
+ * Game Extractor v3.5 — surface the playable build behind a game page.
  * Owned / authorised sites only. No dependencies.
  */
 (function () {
   'use strict';
 
-  var VERSION = '3.4.0';
+  var VERSION = '3.5.0';
   var ROOT_ID = 'gex-root';
 
   if (window.__gex) {
@@ -1051,7 +1051,7 @@
 
   var ICONS = {
     logo: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M6.5 11.5h3.5M8.25 9.75v3.5"/><circle cx="15.5" cy="10.75" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="13" r="1" fill="currentColor" stroke="none"/></svg>',
-    gear: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     search: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
     download: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10L12 14.5 16.5 10"/><path d="M4 20h16"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 4.5v5h-5"/><path d="M20.2 14a8.2 8.2 0 1 1-1.3-6.4l1.6-1.7"/></svg>',
@@ -1071,7 +1071,7 @@
     info: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></svg>',
     play: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
     back: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
-    target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>',
+    target: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
     grid: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>'
   };
 
@@ -1871,7 +1871,9 @@
     findEvidence = {};
     state.findBusy = true;
     state.findProgress = { phase: 'local', done: 0, total: 0 };
-    state.filter = 'name';
+    var keepFilter = !!(opts && opts.keepFilter);
+    var quiet = !!(opts && opts.quiet);
+    if (!keepFilter) state.filter = 'name';
     render();
     var addedLocal = 0;
     try { addedLocal = runFinderLocal(); } catch (e) { addedLocal = 0; }
@@ -1885,7 +1887,7 @@
       state.findBusy = false;
       state.findProgress = { phase: '', done: 0, total: 0 };
       render();
-      toast(nLocal > 0 ? nLocal + ' matches for "' + nm + '"' : 'No source matched "' + nm + '" — try the exact slug');
+      if (!quiet) toast(nLocal > 0 ? nLocal + ' matches for "' + nm + '"' : 'No source matched "' + nm + '" — try the exact slug');
       return;
     }
     toast('Deep search: reading source files…');
@@ -2079,7 +2081,7 @@
       '<div data-find>' + findRowHtml() + '</div>' +
       '<div class="gex-row">' +
       '<label class="gex-field">' + ICONS.search +
-      '<input type="text" data-query placeholder="Filter by host, engine, source…  ( / )" spellcheck="false" aria-label="Filter results" value="' + esc(state.query) + '"></label>' +
+      '<input type="text" data-query placeholder="Search sources, hosts, engines…  ( / )" spellcheck="false" aria-label="Search results and page sources" title="Typing filters + sweeps page sources · Enter deep-searches files" value="' + esc(state.query) + '"></label>' +
       sortSeg() +
       '</div>' +
       '<div class="gex-row"><div data-tabs style="flex:1;min-width:0">' + tabsHtml() + '</div>' +
@@ -2091,7 +2093,7 @@
       '<span><b data-count>' + filtered().length + '</b> shown · <b>' + items.length + '</b> kept · <b>' + stats.imgBlocked + '</b> images blocked</span></div>' +
       '<div class="gex-body" data-body>' + listHtml() + '</div>' +
       '<div data-settings data-open="0"></div>' +
-      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>Alt</kbd><kbd>F</kbd> find <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
+      '<div class="gex-foot"><span class="gex-hint"><kbd>Alt</kbd><kbd>G</kbd> toggle <span style="width:10px"></span><kbd>Alt</kbd><kbd>F</kbd> find <span style="width:10px"></span><kbd>↵</kbd> search <span style="width:10px"></span><kbd>⇧↵</kbd> theater</span>' +
       '<span style="margin-left:auto;font-size:10px;color:#6a6a70">authorised sites only</span></div>';
   }
 
@@ -2233,10 +2235,21 @@
           return;
         }
         if (e.target.hasAttribute('data-query')) {
-          var top = filtered();
-          if (!top.length) return;
-          if (e.shiftKey) openTheater(top[0].url);
-          else openUrl(top[0].url);
+          if (e.shiftKey) {
+            var top = filtered();
+            if (!top.length) return;
+            openTheater(top[0].url);
+            return;
+          }
+          if (e.metaKey || e.ctrlKey) {
+            var top2 = filtered();
+            if (!top2.length) return;
+            openUrl(top2[0].url);
+            return;
+          }
+          e.preventDefault();
+          var q = (e.target.value || '').trim();
+          runFinder(q || deriveName(), { keepFilter: true });
         }
       }
     });
@@ -2624,6 +2637,22 @@
     if (t.hasAttribute('data-query')) {
       state.query = t.value;
       render();
+      clearTimeout(onInput._q);
+      onInput._q = setTimeout(function () {
+        var q = (state.query || '').trim();
+        if (q.length >= 3) {
+          if (!state.findName || state.findName.toLowerCase() !== q.toLowerCase()) {
+            try { runFinder(q, { deep: false, keepFilter: true, quiet: true }); } catch (e) { }
+          }
+        } else if (q.length === 0 && state.findName && !state.findBusy) {
+          state.findToken = (state.findToken || 0) + 1;
+          state.findName = ''; state.findVariants = []; state.findWords = [];
+          state.findMsg = null; state.findInput = '';
+          findEvidence = {};
+          if (state.filter === 'name') state.filter = 'all';
+          reevaluate(); render();
+        }
+      }, 700);
       return;
     }
     if (t.getAttribute('data-act') === 'range') {
@@ -2714,6 +2743,11 @@
         var ev = findEvidence[keyOf(url)];
         return ev && ev.findName === state.findName ? ev : null;
       } catch (e) { return null; }
+    },
+    search: function (name, deep) {
+      state.findOpen = true;
+      render();
+      runFinder(name, { keepFilter: true, deep: deep !== false });
     },
     named: function () { return items.filter(function (i) { return namedMatch(i); }).map(function (i) { return i.url; }); },
     favorites: function () { return Object.keys(favs); },
